@@ -110,7 +110,7 @@ interface PortfolioState {
   
   // Transaction Actions
   loadTransactions: (personId?: string) => Promise<void>;
-  addTransaction: (transaction: Omit<DbTransaction, 'id' | 'person'>) => Promise<DbTransaction | null>;
+  addTransaction: (transaction: Omit<DbTransaction, 'id' | 'person' | 'totalAmount' | 'currency' | 'fee'> & { totalAmount?: number | string; currency?: string; fee?: number | string }) => Promise<DbTransaction | null>;
   updateTransaction: (id: string, updates: Partial<DbTransaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   

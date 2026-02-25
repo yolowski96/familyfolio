@@ -114,7 +114,7 @@ export function AnalyticsView() {
       const date = new Date(tx.date)
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
       const existing = volumeMap.get(monthKey) || { buys: 0, sells: 0 }
-      const value = tx.quantity * tx.pricePerUnit
+      const value = Number(tx.quantity) * Number(tx.pricePerUnit)
       
       if (tx.type === 'BUY') {
         existing.buys += value

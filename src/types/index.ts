@@ -68,10 +68,10 @@ export interface Goal {
   type: GoalType;
   targetValue: number;
   currentValue: number;
-  deadline?: string;
-  portfolioId?: string; // Optional: specific portfolio or ALL
-  assetSymbol?: string; // For ASSET_TARGET type
-  assetType?: AssetType; // For DIVERSIFICATION type
+  deadline?: string | null;
+  portfolioId?: string | null;
+  assetSymbol?: string | null;
+  assetType?: AssetType | null;
   createdAt: string;
   isCompleted: boolean;
 }
