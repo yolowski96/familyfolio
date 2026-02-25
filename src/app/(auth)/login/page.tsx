@@ -75,7 +75,7 @@ export default function LoginPage() {
               disabled={isLoading}
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 pb-4">
             <Label htmlFor="password">Password</Label>
             <Input
               id="password"

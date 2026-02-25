@@ -118,7 +118,7 @@ export default function SignUpPage() {
               minLength={6}
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 pb-4">
             <Label htmlFor="confirmPassword">Confirm password</Label>
             <Input
               id="confirmPassword"
