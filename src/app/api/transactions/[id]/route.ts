@@ -1,0 +1,106 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { transactionRepository, holdingRepository } from '@/lib/db/repositories';
+import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import type { AssetType, TransactionType } from '@prisma/client';
+
+type RouteParams = { params: Promise<{ id: string }> };
+
+const VALID_ASSET_TYPES: AssetType[] = ['ETF', 'STOCK', 'CRYPTO'];
+const VALID_TRANSACTION_TYPES: TransactionType[] = ['BUY', 'SELL'];
+
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
+    const user = await getAuthUser();
+    const { id } = await params;
+    const transaction = await transactionRepository.findById(id, user.id);
+
+    if (!transaction) {
+      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    }
+    return NextResponse.json(transaction);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorizedResponse();
+    console.error('GET /api/transactions/[id] error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to fetch transaction' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  try {
+    const user = await getAuthUser();
+    const { id } = await params;
+    const body = await request.json();
+
+    if (body.assetType && !VALID_ASSET_TYPES.includes(body.assetType)) {
+      return NextResponse.json(
+        { error: `assetType must be one of: ${VALID_ASSET_TYPES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+    if (body.type && !VALID_TRANSACTION_TYPES.includes(body.type)) {
+      return NextResponse.json(
+        { error: `type must be one of: ${VALID_TRANSACTION_TYPES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+    if (body.quantity !== undefined && (typeof body.quantity !== 'number' || body.quantity <= 0)) {
+      return NextResponse.json({ error: 'quantity must be a positive number' }, { status: 400 });
+    }
+    if (body.pricePerUnit !== undefined && (typeof body.pricePerUnit !== 'number' || body.pricePerUnit < 0)) {
+      return NextResponse.json({ error: 'pricePerUnit must be a non-negative number' }, { status: 400 });
+    }
+    if (body.totalAmount !== undefined && (typeof body.totalAmount !== 'number' || body.totalAmount < 0)) {
+      return NextResponse.json({ error: 'totalAmount must be a non-negative number' }, { status: 400 });
+    }
+
+    if (body.date) {
+      const date = new Date(body.date);
+      if (isNaN(date.getTime())) {
+        return NextResponse.json({ error: 'date must be a valid date' }, { status: 400 });
+      }
+      body.date = date;
+    }
+
+    if (body.assetSymbol) body.assetSymbol = body.assetSymbol.toUpperCase();
+    if (body.currency) body.currency = body.currency.toUpperCase();
+
+    const transaction = await transactionRepository.update(id, user.id, body);
+    await holdingRepository.recalculateFromTransactions(user.id, transaction.personId);
+    return NextResponse.json(transaction);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorizedResponse();
+    console.error('PATCH /api/transactions/[id] error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update transaction' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  try {
+    const user = await getAuthUser();
+    const { id } = await params;
+
+    const transaction = await transactionRepository.findById(id, user.id);
+    if (!transaction) {
+      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    }
+
+    const personId = transaction.personId;
+    await transactionRepository.delete(id, user.id);
+    await holdingRepository.recalculateFromTransactions(user.id, personId);
+
+    return NextResponse.json({ success: true, message: 'Transaction deleted successfully' });
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorizedResponse();
+    console.error('DELETE /api/transactions/[id] error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete transaction' },
+      { status: 500 }
+    );
+  }
+}

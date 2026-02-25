@@ -1,0 +1,160 @@
+// Prisma Schema for FamilyFolio Portfolio Tracker
+// Database: PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// PERSON (Portfolio Owner)
+// ============================================
+model Person {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String   @db.VarChar(100)
+  color     String   @db.VarChar(7) // Hex color code
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  transactions Transaction[]
+  holdings     Holding[]
+  goals        Goal[]
+
+  @@index([userId], name: "idx_person_user")
+  @@map("persons")
+}
+
+// ============================================
+// ASSET (metadata cache for stocks/crypto/ETFs)
+// ============================================
+model Asset {
+  symbol    String    @id @db.VarChar(20)
+  name      String    @db.VarChar(255)
+  type      AssetType
+  currency  String    @db.VarChar(3)
+  exchange  String?   @db.VarChar(50)
+  metadata  Json?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  transactions Transaction[]
+  holdings     Holding[]
+
+  @@map("assets")
+}
+
+// ============================================
+// TRANSACTION
+// ============================================
+model Transaction {
+  id           String          @id @default(uuid())
+  userId       String          @map("user_id")
+  personId     String          @map("person_id")
+  assetSymbol  String          @map("asset_symbol") @db.VarChar(20)
+  assetName    String          @map("asset_name") @db.VarChar(255)
+  assetType    AssetType       @map("asset_type")
+  type         TransactionType
+  quantity     Decimal         @db.Decimal(20, 8)
+  pricePerUnit Decimal         @map("price_per_unit") @db.Decimal(20, 8)
+  totalAmount  Decimal         @map("total_amount") @db.Decimal(20, 2)
+  currency     String          @db.VarChar(3)
+  fee          Decimal         @default(0) @db.Decimal(20, 2)
+  date         DateTime
+  exchange     String?         @db.VarChar(50)
+  notes        String?         @db.Text
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetSymbol], references: [symbol])
+
+  @@index([userId], name: "idx_transaction_user")
+  @@index([personId, date(sort: Desc)], name: "idx_transaction_person_date")
+  @@index([assetSymbol], name: "idx_transaction_asset")
+  @@index([date(sort: Desc)], name: "idx_transaction_date")
+  @@map("transactions")
+}
+
+// ============================================
+// HOLDING (calculated from transactions)
+// ============================================
+model Holding {
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  personId          String    @map("person_id")
+  assetSymbol       String    @map("asset_symbol") @db.VarChar(20)
+  assetName         String    @map("asset_name") @db.VarChar(255)
+  assetType         AssetType @map("asset_type")
+  quantity          Decimal   @db.Decimal(20, 8)
+  averagePrice      Decimal   @map("average_price") @db.Decimal(20, 8)
+  totalInvested     Decimal   @map("total_invested") @db.Decimal(20, 2)
+  currentPrice      Decimal?  @map("current_price") @db.Decimal(20, 8)
+  currentValue      Decimal?  @map("current_value") @db.Decimal(20, 2)
+  profitLoss        Decimal?  @map("profit_loss") @db.Decimal(20, 2)
+  profitLossPercent Decimal?  @map("profit_loss_percent") @db.Decimal(10, 4)
+  currency          String    @db.VarChar(3)
+  lastPriceUpdate   DateTime? @map("last_price_update")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetSymbol], references: [symbol])
+
+  @@unique([personId, assetSymbol], name: "unique_person_asset")
+  @@index([userId], name: "idx_holding_user")
+  @@index([personId], name: "idx_holding_person")
+  @@map("holdings")
+}
+
+// ============================================
+// GOAL
+// ============================================
+model Goal {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  personId     String?   @map("person_id")
+  name         String    @db.VarChar(255)
+  type         GoalType
+  targetValue  Decimal   @map("target_value") @db.Decimal(20, 2)
+  currentValue Decimal   @default(0) @map("current_value") @db.Decimal(20, 2)
+  deadline     DateTime?
+  assetSymbol  String?   @map("asset_symbol") @db.VarChar(20)
+  assetType    AssetType? @map("asset_type")
+  isCompleted  Boolean   @default(false) @map("is_completed")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  person Person? @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([userId], name: "idx_goal_user")
+  @@index([personId], name: "idx_goal_person")
+  @@map("goals")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+enum AssetType {
+  ETF
+  STOCK
+  CRYPTO
+}
+
+enum TransactionType {
+  BUY
+  SELL
+}
+
+enum GoalType {
+  PORTFOLIO_VALUE
+  MONTHLY_INVESTMENT
+  ASSET_TARGET
+  DIVERSIFICATION
+}

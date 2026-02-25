@@ -1,36 +1,141 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FamilyFolio - Family Wealth Tracker
+
+A modern, multi-user portfolio tracking application built with Next.js 14+, TypeScript, and Tailwind CSS. Track your family's investments across stocks, crypto, and ETFs with support for multiple sub-accounts and an aggregated "Family View".
+
+![FamilyFolio](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=flat-square&logo=typescript)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.0-38B2AC?style=flat-square&logo=tailwind-css)
+
+## Features
+
+- 📊 **Multi-Portfolio Support** - Create separate portfolios for family members (Dad, Mom, Kids, etc.)
+- 👨‍👩‍👧‍👦 **Family View** - Aggregated view combining all portfolios into one unified dashboard
+- 💹 **Asset Tracking** - Track Stocks, Crypto, and ETFs with real-time mock pricing
+- 📈 **Performance Metrics** - View total balance, P/L, top performers, and 24h changes
+- 🎨 **Beautiful UI** - Professional fintech design with dark mode default
+- 💾 **Local-First** - Data persists in localStorage using Zustand
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4
+- **UI Components**: shadcn/ui
+- **State Management**: Zustand with persist middleware
+- **Charts**: Recharts
+- **Icons**: Lucide React
+- **Date Handling**: date-fns
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+ 
+- npm or yarn
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone <your-repo-url>
+cd familyfolio
+
+# Install dependencies
+npm install
+
+# Run the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+├── app/
+│   ├── globals.css        # Global styles and CSS variables
+│   ├── layout.tsx         # Root layout with providers
+│   └── page.tsx           # Dashboard page
+├── components/
+│   ├── dashboard/
+│   │   ├── AllocationChart.tsx   # Pie chart for asset allocation
+│   │   ├── Dashboard.tsx         # Main dashboard component
+│   │   ├── HoldingsTable.tsx     # Holdings data table
+│   │   └── SummaryCards.tsx      # Summary metric cards
+│   ├── layout/
+│   │   ├── Header.tsx            # App header
+│   │   ├── PortfolioSwitcher.tsx # Portfolio dropdown selector
+│   │   └── ThemeToggle.tsx       # Dark/light mode toggle
+│   ├── providers/
+│   │   ├── StoreInitializer.tsx  # Initializes mock data
+│   │   └── ThemeProvider.tsx     # Theme context provider
+│   ├── transactions/
+│   │   └── AddTransactionDialog.tsx # Transaction form dialog
+│   └── ui/                       # shadcn/ui components
+├── lib/
+│   ├── mockData.ts        # Mock data generators and price fetcher
+│   └── utils.ts           # Utility functions
+├── store/
+│   └── usePortfolioStore.ts # Zustand store with selectors
+└── types/
+    └── index.ts           # TypeScript interfaces
+```
 
-## Learn More
+## Usage
 
-To learn more about Next.js, take a look at the following resources:
+### Portfolio Management
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Switch Portfolios**: Use the dropdown in the header to switch between individual portfolios or "Family View (All)"
+2. **Family View**: When selected, all transactions are aggregated - if Portfolio A has 1 BTC and Portfolio B has 2 BTC, you'll see 3 BTC total
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Adding Transactions
 
-## Deploy on Vercel
+1. Click the "Add Transaction" button in the header
+2. Select the target portfolio
+3. Choose Buy or Sell
+4. Enter asset details (symbol auto-suggests common assets)
+5. Input quantity and price per unit
+6. Submit to add the transaction
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Mock Data
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The app comes pre-seeded with:
+- **2 Portfolios**: "Main Stash" and "Kids Fund"
+- **6 Transactions**: Mix of BTC, ETH, AAPL, VOO, and VTI
+
+Mock prices are provided for common assets:
+- BTC: $65,000
+- ETH: $3,500
+- AAPL: $185
+- VOO: $450
+- And more...
+
+## Customization
+
+### Adding More Mock Assets
+
+Edit `src/lib/mockData.ts` to add more assets to `MOCK_PRICES` and `ASSET_SUGGESTIONS`.
+
+### Styling
+
+The app uses a professional fintech aesthetic with:
+- **Dark mode default**
+- **Emerald-500** for profits
+- **Rose-500** for losses
+- **Cyan accents** for primary actions
+
+Customize colors in `src/app/globals.css`.
+
+## Scripts
+
+```bash
+npm run dev      # Start development server
+npm run build    # Build for production
+npm run start    # Start production server
+npm run lint     # Run ESLint
+```
+
+## License
+
+MIT

@@ -1,0 +1,84 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { holdingRepository } from '@/lib/db/repositories';
+import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { priceService } from '@/lib/api/price-service';
+import type { AssetType } from '@prisma/client';
+
+export async function GET(request: NextRequest) {
+  try {
+    const user = await getAuthUser();
+    const { searchParams } = new URL(request.url);
+    const personId = searchParams.get('personId');
+
+    const holdings = personId
+      ? await holdingRepository.findByPersonId(user.id, personId)
+      : await holdingRepository.findAll(user.id);
+
+    return NextResponse.json(holdings);
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorizedResponse();
+    console.error('GET /api/holdings error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to fetch holdings' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const user = await getAuthUser();
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action');
+
+    if (action === 'update-prices') {
+      const uniqueAssets = await holdingRepository.getUniqueAssets(user.id);
+
+      if (uniqueAssets.length === 0) {
+        return NextResponse.json({ success: true, updated: 0, message: 'No holdings to update' });
+      }
+
+      const assets = uniqueAssets.map((h) => ({
+        symbol: h.symbol,
+        assetType: h.type as AssetType,
+      }));
+
+      const priceData = await priceService.batchGetPrices(assets);
+      const prices = new Map<string, number>();
+      for (const [symbol, data] of priceData) {
+        prices.set(symbol, data.price);
+      }
+
+      const updatedCount = await holdingRepository.updatePrices(user.id, prices);
+      return NextResponse.json({
+        success: true,
+        updated: updatedCount,
+        message: `Updated prices for ${updatedCount} holdings`,
+      });
+    }
+
+    if (action === 'recalculate') {
+      const body = await request.json();
+      const { personId } = body;
+
+      if (!personId) {
+        return NextResponse.json({ error: 'personId is required for recalculation' }, { status: 400 });
+      }
+
+      await holdingRepository.recalculateFromTransactions(user.id, personId);
+      return NextResponse.json({ success: true, message: 'Holdings recalculated successfully' });
+    }
+
+    return NextResponse.json(
+      { error: 'Invalid action. Supported actions: update-prices, recalculate' },
+      { status: 400 }
+    );
+  } catch (error) {
+    if (error instanceof AuthError) return unauthorizedResponse();
+    console.error('POST /api/holdings error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to process holdings action' },
+      { status: 500 }
+    );
+  }
+}
