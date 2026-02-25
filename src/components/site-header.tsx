@@ -3,14 +3,14 @@
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
+import { Button } from "@/components/ui/button"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { IconUsers, IconWallet } from "@tabler/icons-react"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { IconChevronDown, IconUsers, IconWallet } from "@tabler/icons-react"
 import { ThemeToggle } from "@/components/layout/ThemeToggle"
 
 export function SiteHeader() {
@@ -34,39 +34,47 @@ export function SiteHeader() {
         />
         <h1 className="text-base font-medium hidden sm:block">Dashboard</h1>
         <div className="ml-auto flex items-center gap-2 shrink-0">
-          <Select value={activePersonId} onValueChange={setActivePerson}>
-            <SelectTrigger className="w-[160px] sm:w-[180px]">
-              <div className="flex items-center gap-2 overflow-hidden">
-                {activePersonId === 'ALL' ? (
-                  <IconUsers className="h-4 w-4 shrink-0 text-cyan-500" />
-                ) : (
-                  <IconWallet className="h-4 w-4 shrink-0 text-emerald-500" />
-                )}
-                <span className="truncate">
-                  <SelectValue placeholder="Select person">{getDisplayValue()}</SelectValue>
-                </span>
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">
-                <div className="flex items-center gap-2">
-                  <IconUsers className="h-4 w-4 text-cyan-500" />
-                  <span>Family View (All)</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="h-9 w-[160px] sm:w-[180px] justify-between gap-2 border bg-transparent px-3 shadow-xs"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                  {activePersonId === 'ALL' ? (
+                    <IconUsers className="h-4 w-4 shrink-0 text-cyan-500" />
+                  ) : (
+                    <IconWallet className="h-4 w-4 shrink-0 text-emerald-500" />
+                  )}
+                  <span className="truncate text-left">{getDisplayValue()}</span>
                 </div>
-              </SelectItem>
+                <IconChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              side="bottom"
+              sideOffset={4}
+              className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[160px] sm:min-w-[180px]"
+            >
+              <DropdownMenuItem onClick={() => setActivePerson('ALL')}>
+                <IconUsers className="h-4 w-4 text-cyan-500" />
+                <span>Family View (All)</span>
+              </DropdownMenuItem>
               {persons.map((person) => (
-                <SelectItem key={person.id} value={person.id}>
-                  <div className="flex items-center gap-2">
-                    <div 
-                      className="h-3 w-3 rounded-full shrink-0" 
-                      style={{ backgroundColor: person.color }}
-                    />
-                    <span>{person.name}</span>
-                  </div>
-                </SelectItem>
+                <DropdownMenuItem
+                  key={person.id}
+                  onClick={() => setActivePerson(person.id)}
+                >
+                  <div
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: person.color }}
+                  />
+                  <span>{person.name}</span>
+                </DropdownMenuItem>
               ))}
-            </SelectContent>
-          </Select>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <ThemeToggle />
         </div>
       </div>

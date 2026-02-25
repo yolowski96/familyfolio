@@ -25,9 +25,12 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  // getSession() reads the JWT locally and only hits the network
+  // when the access token is expired and needs refreshing.
+  // Actual auth verification for data operations happens in API routes via getUser().
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
   const isAuthRoute =
     request.nextUrl.pathname.startsWith('/login') ||
@@ -36,13 +39,13 @@ export async function updateSession(request: NextRequest) {
 
   const isApiRoute = request.nextUrl.pathname.startsWith('/api');
 
-  if (!user && !isAuthRoute && !isApiRoute) {
+  if (!session && !isAuthRoute && !isApiRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthRoute && !request.nextUrl.pathname.startsWith('/auth/callback')) {
+  if (session && isAuthRoute && !request.nextUrl.pathname.startsWith('/auth/callback')) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);
