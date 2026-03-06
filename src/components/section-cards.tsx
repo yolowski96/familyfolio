@@ -19,10 +19,31 @@ function formatPercent(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
 }
 
+function LoadingSkeleton() {
+  return (
+    <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+      {[1, 2, 3, 4].map((i) => (
+        <Card key={i} className="@container/card">
+          <CardHeader>
+            <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+            <div className="h-8 w-32 bg-muted rounded animate-pulse mt-2" />
+          </CardHeader>
+          <CardFooter className="flex-col items-start gap-1.5">
+            <div className="h-4 w-28 bg-muted rounded animate-pulse" />
+            <div className="h-3 w-20 bg-muted rounded animate-pulse" />
+          </CardFooter>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
 export function SectionCards() {
-  const { summary, isLoading } = usePortfolioWithPrices()
+  const { summary, isLoading: pricesLoading } = usePortfolioWithPrices()
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)
+  const isInitialized = usePortfolioStore((state) => state.isInitialized)
+  const storeLoading = usePortfolioStore((state) => state.isLoading)
 
   const total24hChange = summary.holdings.reduce((acc, h) => acc + h.change24h, 0)
   const total24hPercent = summary.totalBalance > 0 
@@ -32,6 +53,10 @@ export function SectionCards() {
   const viewName = activePersonId === 'ALL' 
     ? 'All Portfolios' 
     : persons.find(p => p.id === activePersonId)?.name || 'Portfolio'
+
+  if (!isInitialized || storeLoading) {
+    return <LoadingSkeleton />
+  }
 
   return (
     <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">

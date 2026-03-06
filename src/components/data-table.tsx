@@ -35,6 +35,8 @@ export function DataTable() {
   const { summary } = usePortfolioWithPrices()
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)
+  const isInitialized = usePortfolioStore((state) => state.isInitialized)
+  const storeLoading = usePortfolioStore((state) => state.isLoading)
   const [sortField, setSortField] = React.useState<string | null>(null)
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc')
 
@@ -68,6 +70,40 @@ export function DataTable() {
       <span className="ml-1 text-xs opacity-50">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
     </Button>
   )
+
+  if (!isInitialized || storeLoading) {
+    return (
+      <div className="w-full flex flex-col gap-4 px-4 lg:px-6">
+        <h2 className="text-lg font-semibold">Holdings</h2>
+        <div className="overflow-hidden rounded-lg border">
+          <Table>
+            <TableHeader className="bg-muted">
+              <TableRow>
+                <TableHead>Asset</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead className="text-right">Balance</TableHead>
+                <TableHead className="text-right">24h</TableHead>
+                <TableHead className="text-right">P/L</TableHead>
+                <TableHead className="text-right">Value</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <TableRow key={i}>
+                  <TableCell><div className="h-4 w-24 bg-muted rounded animate-pulse" /></TableCell>
+                  <TableCell className="text-right"><div className="h-4 w-16 bg-muted rounded animate-pulse ml-auto" /></TableCell>
+                  <TableCell className="text-right"><div className="h-4 w-20 bg-muted rounded animate-pulse ml-auto" /></TableCell>
+                  <TableCell className="text-right"><div className="h-4 w-14 bg-muted rounded animate-pulse ml-auto" /></TableCell>
+                  <TableCell className="text-right"><div className="h-4 w-16 bg-muted rounded animate-pulse ml-auto" /></TableCell>
+                  <TableCell className="text-right"><div className="h-4 w-20 bg-muted rounded animate-pulse ml-auto" /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="w-full flex flex-col gap-4 px-4 lg:px-6">

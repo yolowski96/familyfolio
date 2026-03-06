@@ -88,14 +88,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const user = await getAuthUser();
     const { id } = await params;
 
-    const transaction = await transactionRepository.findById(id, user.id);
-    if (!transaction) {
+    // Use fast delete that returns personId without fetching relations
+    const personId = await transactionRepository.deleteFast(id, user.id);
+    if (!personId) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
     }
 
-    const personId = transaction.personId;
-    await transactionRepository.delete(id, user.id);
-    await holdingRepository.recalculateFromTransactions(user.id, personId);
+    // Recalculate holdings in background - don't block the response
+    holdingRepository.recalculateFromTransactions(user.id, personId)
+      .catch(err => console.error('Background holding recalculation failed:', err));
 
     return NextResponse.json({ success: true, message: 'Transaction deleted successfully' });
   } catch (error) {

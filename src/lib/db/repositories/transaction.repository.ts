@@ -87,29 +87,42 @@ export class TransactionRepository {
 
   async create(userId: string, data: CreateTransactionInput): Promise<TransactionWithRelations> {
     try {
-      await this.ensureAssetExists(
-        data.assetSymbol, data.assetName, data.assetType, data.currency, data.exchange
-      );
+      // Use raw SQL for maximum performance - single query for both asset upsert and transaction insert
+      const transactionId = crypto.randomUUID();
+      const now = new Date();
 
-      return await prisma.transaction.create({
-        data: {
-          userId,
-          personId: data.personId,
-          assetSymbol: data.assetSymbol,
-          assetName: data.assetName,
-          assetType: data.assetType,
-          type: data.type,
-          quantity: data.quantity,
-          pricePerUnit: data.pricePerUnit,
-          totalAmount: data.totalAmount,
-          currency: data.currency,
-          fee: data.fee || 0,
-          date: new Date(data.date),
-          exchange: data.exchange,
-          notes: data.notes,
-        },
-        include: includeRelations,
-      });
+      await prisma.$executeRaw`
+        WITH asset_upsert AS (
+          INSERT INTO assets (symbol, name, type, currency, exchange, created_at, updated_at)
+          VALUES (${data.assetSymbol}, ${data.assetName}, ${data.assetType}::"AssetType", ${data.currency}, ${data.exchange || null}, ${now}, ${now})
+          ON CONFLICT (symbol) DO UPDATE SET name = EXCLUDED.name, exchange = EXCLUDED.exchange, updated_at = ${now}
+        )
+        INSERT INTO transactions (id, user_id, person_id, asset_symbol, asset_name, asset_type, type, quantity, price_per_unit, total_amount, currency, fee, date, exchange, notes, created_at, updated_at)
+        VALUES (${transactionId}, ${userId}, ${data.personId}, ${data.assetSymbol}, ${data.assetName}, ${data.assetType}::"AssetType", ${data.type}::"TransactionType", ${data.quantity}, ${data.pricePerUnit}, ${data.totalAmount}, ${data.currency}, ${data.fee || 0}, ${new Date(data.date)}, ${data.exchange || null}, ${data.notes || null}, ${now}, ${now})
+      `;
+
+      // Return a constructed response instead of fetching - frontend has all the info
+      return {
+        id: transactionId,
+        userId,
+        personId: data.personId,
+        assetSymbol: data.assetSymbol,
+        assetName: data.assetName,
+        assetType: data.assetType,
+        type: data.type,
+        quantity: data.quantity,
+        pricePerUnit: data.pricePerUnit,
+        totalAmount: data.totalAmount,
+        currency: data.currency,
+        fee: data.fee || 0,
+        date: new Date(data.date),
+        exchange: data.exchange || null,
+        notes: data.notes || null,
+        createdAt: now,
+        updatedAt: now,
+        person: { id: data.personId, name: '', color: '' }, // Placeholder - not used by frontend
+        asset: { symbol: data.assetSymbol, name: data.assetName, type: data.assetType },
+      } as TransactionWithRelations;
     } catch (error) {
       console.error('Error creating transaction:', error);
       throw new Error(handlePrismaError(error));
@@ -158,6 +171,23 @@ export class TransactionRepository {
       if (!existing) throw new Error('Transaction not found');
 
       await prisma.transaction.delete({ where: { id } });
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      throw new Error(handlePrismaError(error));
+    }
+  }
+
+  /**
+   * Fast delete that returns personId in a single query
+   */
+  async deleteFast(id: string, userId: string): Promise<string | null> {
+    try {
+      const result = await prisma.$queryRaw<{ person_id: string }[]>`
+        DELETE FROM transactions 
+        WHERE id = ${id} AND user_id = ${userId}
+        RETURNING person_id
+      `;
+      return result.length > 0 ? result[0].person_id : null;
     } catch (error) {
       console.error('Error deleting transaction:', error);
       throw new Error(handlePrismaError(error));

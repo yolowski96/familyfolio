@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { usePortfolioStore, DbTransaction, DbHolding } from '@/store/usePortfolioStore';
 import { AssetHolding, AssetType, PortfolioSummary, PriceData } from '@/types';
@@ -100,7 +100,9 @@ function getUniqueAssetsFromHoldings(
 function calculateSummaryFromTransactions(
   transactions: DbTransaction[],
   activePersonId: string | 'ALL',
-  livePrices: PriceMap
+  livePrices: PriceMap,
+  pricesLoaded: boolean,
+  warnedSymbols: Set<string>
 ): PortfolioSummary {
   // Filter transactions based on active person
   const filteredTransactions =
@@ -185,9 +187,10 @@ function calculateSummaryFromTransactions(
       change24hPercent = livePrice?.changePercent24h ?? 0;
     }
 
-    // Skip holdings without price data (will show 0 values)
-    if (currentPrice === 0) {
+    // Only warn about missing price data after prices have been loaded
+    if (currentPrice === 0 && pricesLoaded && !warnedSymbols.has(holding.symbol)) {
       console.warn(`No price data for ${holding.symbol}`);
+      warnedSymbols.add(holding.symbol);
     }
 
     const totalValue = holding.totalQuantity * currentPrice;
@@ -407,13 +410,27 @@ export function usePortfolioWithPrices() {
     refetchOnWindowFocus: true,
   });
 
+  // Track symbols we've already warned about to avoid spam
+  const warnedSymbolsRef = useRef<Set<string>>(new Set());
+  
+  // Reset warned symbols when assets change
+  const assetsKey = uniqueAssets.map(a => a.symbol).sort().join(',');
+  const prevAssetsKeyRef = useRef(assetsKey);
+  if (prevAssetsKeyRef.current !== assetsKey) {
+    warnedSymbolsRef.current.clear();
+    prevAssetsKeyRef.current = assetsKey;
+  }
+  
+  // Prices are considered loaded when query has completed (not loading and has data)
+  const pricesLoaded = !isLoading && Object.keys(livePrices).length > 0;
+
   // Calculate summary with live prices
   const summary = useMemo(() => {
     if (useHoldings) {
       return calculateSummaryFromHoldings(holdings, activePersonId, livePrices);
     }
-    return calculateSummaryFromTransactions(transactions, activePersonId, livePrices);
-  }, [useHoldings, holdings, transactions, activePersonId, livePrices]);
+    return calculateSummaryFromTransactions(transactions, activePersonId, livePrices, pricesLoaded, warnedSymbolsRef.current);
+  }, [useHoldings, holdings, transactions, activePersonId, livePrices, pricesLoaded]);
 
   return {
     summary,

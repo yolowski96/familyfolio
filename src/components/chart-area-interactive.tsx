@@ -92,6 +92,8 @@ export function ChartAreaInteractive() {
   const { summary } = usePortfolioWithPrices()
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)
+  const isInitialized = usePortfolioStore((state) => state.isInitialized)
+  const storeLoading = usePortfolioStore((state) => state.isLoading)
 
   React.useEffect(() => {
     if (isMobile) {
@@ -115,6 +117,21 @@ export function ChartAreaInteractive() {
     : persons.find(p => p.id === activePersonId)?.name || 'Portfolio'
 
   const periodLabel = TIME_RANGES[timeRange].label
+
+  // Show loading skeleton while data is being fetched
+  if (!isInitialized || storeLoading) {
+    return (
+      <Card className="@container/card">
+        <CardHeader>
+          <CardTitle>Portfolio Value</CardTitle>
+          <CardDescription>Loading chart data...</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center h-[250px]">
+          <div className="w-full h-full bg-muted/50 rounded animate-pulse" />
+        </CardContent>
+      </Card>
+    )
+  }
 
   if (chartData.length === 0) {
     return (

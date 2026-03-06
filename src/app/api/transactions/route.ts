@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'date must be a valid date' }, { status: 400 });
     }
 
-    const transaction = await transactionRepository.create(user.id, {
+    const transactionData = {
       personId: body.personId as string,
       assetSymbol: (body.assetSymbol as string).toUpperCase(),
       assetName: body.assetName as string,
@@ -106,10 +106,24 @@ export async function POST(request: NextRequest) {
       date,
       exchange: body.exchange as string | undefined,
       notes: body.notes as string | undefined,
-    });
+    };
 
-    await holdingRepository.recalculateFromTransactions(user.id, body.personId as string);
-    return NextResponse.json(transaction, { status: 201 });
+    const transaction = await transactionRepository.create(user.id, transactionData);
+
+    // Update holding in background - don't wait for it to return response faster
+    holdingRepository.updateHoldingForTransaction(user.id, transactionData.personId, {
+      assetSymbol: transactionData.assetSymbol,
+      assetName: transactionData.assetName,
+      assetType: transactionData.assetType,
+      type: transactionData.type,
+      quantity: transactionData.quantity,
+      pricePerUnit: transactionData.pricePerUnit,
+      totalAmount: transactionData.totalAmount,
+      fee: transactionData.fee,
+      currency: transactionData.currency,
+    }).catch(err => console.error('Background holding update failed:', err));
+
+    return NextResponse.json({ transaction }, { status: 201 });
   } catch (error) {
     if (error instanceof AuthError) return unauthorizedResponse();
     console.error('POST /api/transactions error:', error);

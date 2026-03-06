@@ -296,13 +296,15 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
         const data = await response.json();
         throw new Error(data.error || 'Failed to create transaction');
       }
-      const newTransaction = await response.json();
+      const { transaction: newTransaction } = await response.json();
       set({
         transactions: [newTransaction, ...get().transactions],
         isLoading: false,
       });
-      // Reload holdings as they're recalculated
-      await get().loadHoldings();
+      // Only refresh holdings if they've been loaded (user visited holdings page)
+      if (get().holdings.length > 0) {
+        get().loadHoldings().catch(err => console.error('Background holdings refresh failed:', err));
+      }
       return newTransaction;
     } catch (error) {
       console.error('Error creating transaction:', error);
@@ -333,8 +335,10 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
         ),
         isLoading: false,
       });
-      // Reload holdings as they're recalculated
-      await get().loadHoldings();
+      // Only refresh holdings if they've been loaded (user visited holdings page)
+      if (get().holdings.length > 0) {
+        get().loadHoldings().catch(err => console.error('Background holdings refresh failed:', err));
+      }
     } catch (error) {
       console.error('Error updating transaction:', error);
       set({ 
@@ -358,8 +362,10 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
         transactions: get().transactions.filter(t => t.id !== id),
         isLoading: false,
       });
-      // Reload holdings as they're recalculated
-      await get().loadHoldings();
+      // Only refresh holdings if they've been loaded (user visited holdings page)
+      if (get().holdings.length > 0) {
+        get().loadHoldings().catch(err => console.error('Background holdings refresh failed:', err));
+      }
     } catch (error) {
       console.error('Error deleting transaction:', error);
       set({ 
@@ -519,12 +525,9 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
     
     set({ isLoading: true, error: null });
     try {
-      await Promise.all([
-        get().loadPersons(),
-        get().loadTransactions(),
-        get().loadHoldings(),
-        get().loadGoals(),
-      ]);
+      // Only load transactions initially - it's needed on most pages
+      // Holdings, persons, goals are loaded on-demand when needed
+      await get().loadTransactions();
       set({ isLoading: false, isInitialized: true });
     } catch (error) {
       console.error('Error loading all data:', error);

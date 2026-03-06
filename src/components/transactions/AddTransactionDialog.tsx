@@ -62,7 +62,9 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
   const transactions = usePortfolioStore((state) => state.transactions);
   const activePersonId = usePortfolioStore((state) => state.activePersonId);
   const addTransactionAction = usePortfolioStore((state) => state.addTransaction);
+  const loadPersons = usePortfolioStore((state) => state.loadPersons);
   const [open, setOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Form state
   const [personId, setPersonId] = useState('');
@@ -128,6 +130,10 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
   // Reset form and pre-select person when dialog opens
   useEffect(() => {
     if (open) {
+      // Load persons if not already loaded
+      if (persons.length === 0) {
+        loadPersons().catch(console.error);
+      }
       // Reset form when opening
       resetForm();
       // Pre-select person
@@ -255,6 +261,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
     setSearchQuery('');
     setSearchResults([]);
     setShowResults(false);
+    setIsSaving(false);
   };
 
   // Auto-calculate quantity or total based on which field was edited last
@@ -338,19 +345,24 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
       }
     }
 
-    await addTransactionAction({
-      personId,
-      assetSymbol: symbol.toUpperCase(),
-      assetName,
-      assetType,
-      type: transactionType,
-      quantity: parseFloat(quantity),
-      pricePerUnit: parseFloat(pricePerUnit),
-      date: date,
-    });
+    setIsSaving(true);
+    try {
+      await addTransactionAction({
+        personId,
+        assetSymbol: symbol.toUpperCase(),
+        assetName,
+        assetType,
+        type: transactionType,
+        quantity: parseFloat(quantity),
+        pricePerUnit: parseFloat(pricePerUnit),
+        date: date,
+      });
 
-    resetForm();
-    setOpen(false);
+      resetForm();
+      setOpen(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getAssetTypeIcon = (type: string) => {
@@ -370,7 +382,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
     : null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(value) => !isSaving && setOpen(value)}>
       <DialogTrigger asChild>
         {children || (
           <Button 
@@ -673,18 +685,26 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
               type="button" 
               variant="ghost" 
               onClick={() => setOpen(false)}
+              disabled={isSaving}
             >
               Cancel
             </Button>
             <Button 
               type="submit"
-              disabled={!personId || !symbol || !assetName || !quantity || !pricePerUnit}
+              disabled={!personId || !symbol || !assetName || !quantity || !pricePerUnit || isSaving}
               className={transactionType === 'SELL' 
                 ? "bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white"
                 : "bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white"
               }
             >
-              {transactionType === 'SELL' ? 'Sell Asset' : 'Add Transaction'}
+              {isSaving ? (
+                <>
+                  <IconLoader2 className="size-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                transactionType === 'SELL' ? 'Sell Asset' : 'Add Transaction'
+              )}
             </Button>
           </DialogFooter>
         </form>

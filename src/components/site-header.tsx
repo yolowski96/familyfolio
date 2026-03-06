@@ -1,5 +1,6 @@
 "use client"
 
+import { useCallback, useRef } from "react"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
@@ -17,6 +18,15 @@ export function SiteHeader() {
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)
   const setActivePerson = usePortfolioStore((state) => state.setActivePerson)
+  const loadPersons = usePortfolioStore((state) => state.loadPersons)
+  const personsLoaded = useRef(false)
+
+  const handleDropdownOpen = useCallback((open: boolean) => {
+    if (open && !personsLoaded.current && persons.length === 0) {
+      personsLoaded.current = true
+      loadPersons().catch(console.error)
+    }
+  }, [loadPersons, persons.length])
 
   const getDisplayValue = () => {
     if (activePersonId === 'ALL') return 'Family View (All)'
@@ -34,7 +44,7 @@ export function SiteHeader() {
         />
         <h1 className="text-base font-medium hidden sm:block">Dashboard</h1>
         <div className="ml-auto flex items-center gap-2 shrink-0">
-          <DropdownMenu>
+          <DropdownMenu onOpenChange={handleDropdownOpen}>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
