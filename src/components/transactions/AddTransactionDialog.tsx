@@ -72,6 +72,8 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
   const [assetName, setAssetName] = useState('');
   const [quantity, setQuantity] = useState('');
   const [pricePerUnit, setPricePerUnit] = useState('');
+  const [totalAmount, setTotalAmount] = useState('');
+  const [lastEdited, setLastEdited] = useState<'quantity' | 'total' | null>(null);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   // Search state
@@ -200,6 +202,10 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
     // Clear form fields when switching modes
     setSymbol('');
     setAssetName('');
+    setQuantity('');
+    setPricePerUnit('');
+    setTotalAmount('');
+    setLastEdited(null);
     setSearchQuery('');
     setSearchResults([]);
     setShowResults(false);
@@ -222,12 +228,57 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
     setAssetName('');
     setQuantity('');
     setPricePerUnit('');
+    setTotalAmount('');
+    setLastEdited(null);
     setDate(format(new Date(), 'yyyy-MM-dd'));
     setTransactionType('BUY');
     setAssetType('STOCK');
     setSearchQuery('');
     setSearchResults([]);
     setShowResults(false);
+  };
+
+  // Auto-calculate quantity or total based on which field was edited last
+  const handlePricePerUnitChange = (value: string) => {
+    setPricePerUnit(value);
+    const price = parseFloat(value);
+    if (!isNaN(price) && price > 0) {
+      if (lastEdited === 'total' && totalAmount) {
+        const total = parseFloat(totalAmount);
+        if (!isNaN(total)) {
+          setQuantity((total / price).toFixed(2));
+        }
+      } else if (lastEdited === 'quantity' && quantity) {
+        const qty = parseFloat(quantity);
+        if (!isNaN(qty)) {
+          setTotalAmount((qty * price).toFixed(2));
+        }
+      }
+    }
+  };
+
+  const handleQuantityChange = (value: string) => {
+    setQuantity(value);
+    setLastEdited('quantity');
+    const qty = parseFloat(value);
+    const price = parseFloat(pricePerUnit);
+    if (!isNaN(qty) && !isNaN(price) && price > 0) {
+      setTotalAmount((qty * price).toFixed(2));
+    } else if (value === '') {
+      setTotalAmount('');
+    }
+  };
+
+  const handleTotalAmountChange = (value: string) => {
+    setTotalAmount(value);
+    setLastEdited('total');
+    const total = parseFloat(value);
+    const price = parseFloat(pricePerUnit);
+    if (!isNaN(total) && !isNaN(price) && price > 0) {
+      setQuantity((total / price).toFixed(2));
+    } else if (value === '') {
+      setQuantity('');
+    }
   };
 
   const handleSelectAsset = (result: SearchResult) => {
@@ -311,7 +362,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold">
             New Transaction
@@ -320,8 +371,8 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
             Record a buy or sell transaction for your portfolio.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-5 py-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="grid gap-5 py-4 overflow-y-auto flex-1 pr-2">
             {/* Person Selection */}
             <div className="grid gap-2">
               <Label htmlFor="person">Person</Label>
@@ -523,7 +574,21 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
               </div>
             )}
 
-            {/* Quantity and Price */}
+            {/* Price per Unit */}
+            <div className="grid gap-2">
+              <Label htmlFor="price">Price per Unit (EUR)</Label>
+              <Input
+                id="price"
+                type="number"
+                step="any"
+                min="0"
+                placeholder="0.00"
+                value={pricePerUnit}
+                onChange={(e) => handlePricePerUnitChange(e.target.value)}
+              />
+            </div>
+
+            {/* Quantity and Total Amount - auto-calculate between them */}
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="quantity">Quantity</Label>
@@ -535,20 +600,26 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
                   max={transactionType === 'SELL' && selectedHolding ? selectedHolding.quantity : undefined}
                   placeholder="0.00"
                   value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
+                  onChange={(e) => handleQuantityChange(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Enter quantity or total to auto-calculate
+                </p>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="price">Price per Unit (EUR)</Label>
+                <Label htmlFor="totalAmount">Total Amount (EUR)</Label>
                 <Input
-                  id="price"
+                  id="totalAmount"
                   type="number"
                   step="any"
                   min="0"
                   placeholder="0.00"
-                  value={pricePerUnit}
-                  onChange={(e) => setPricePerUnit(e.target.value)}
+                  value={totalAmount}
+                  onChange={(e) => handleTotalAmountChange(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Total = Quantity × Price
+                </p>
               </div>
             </div>
 
@@ -564,7 +635,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
             </div>
 
             {/* Total Preview */}
-            {quantity && pricePerUnit && (
+            {totalAmount && parseFloat(totalAmount) > 0 && (
               <div className="p-4 rounded-lg bg-muted">
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Total Value</span>
@@ -572,13 +643,13 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
                     "text-xl font-semibold",
                     transactionType === 'SELL' ? "text-emerald-500" : ""
                   )}>
-                    {transactionType === 'SELL' ? '+' : ''}{formatCurrency(parseFloat(quantity) * parseFloat(pricePerUnit))}
+                    {transactionType === 'SELL' ? '+' : ''}{formatCurrency(parseFloat(totalAmount))}
                   </span>
                 </div>
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0 pt-4 border-t mt-4">
             <Button 
               type="button" 
               variant="ghost" 

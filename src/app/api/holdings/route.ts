@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { holdingRepository } from '@/lib/db/repositories';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { parseJsonBody } from '@/lib/api-utils';
 import { priceService } from '@/lib/api/price-service';
 import type { AssetType } from '@prisma/client';
 
@@ -58,14 +59,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'recalculate') {
-      const body = await request.json();
-      const { personId } = body;
+      const parsed = await parseJsonBody(request);
+      if (parsed.error) return parsed.error;
+      const { personId } = parsed.data as Record<string, unknown>;
 
       if (!personId) {
         return NextResponse.json({ error: 'personId is required for recalculation' }, { status: 400 });
       }
 
-      await holdingRepository.recalculateFromTransactions(user.id, personId);
+      await holdingRepository.recalculateFromTransactions(user.id, personId as string);
       return NextResponse.json({ success: true, message: 'Holdings recalculated successfully' });
     }
 

@@ -2,6 +2,7 @@ import { PriceData, AssetType } from '@/types';
 import { YahooFinanceProvider } from './providers/yahoo-finance';
 import { CoinGeckoProvider } from './providers/coingecko';
 import { exchangeRateProvider } from './providers/exchange-rate';
+import { COINGECKO_API_KEY } from '@/lib/env';
 
 interface CacheEntry {
   data: PriceData;
@@ -31,9 +32,7 @@ export class PriceService {
 
   constructor() {
     this.yahooProvider = new YahooFinanceProvider();
-    this.coinGeckoProvider = new CoinGeckoProvider(
-      process.env.NEXT_PUBLIC_COINGECKO_API_KEY
-    );
+    this.coinGeckoProvider = new CoinGeckoProvider(COINGECKO_API_KEY);
     this.cache = new Map();
   }
 

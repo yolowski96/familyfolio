@@ -6,7 +6,6 @@
         "shadcn@latest",
         "mcp"
       ]
-    },
-    
+    }
   }
 }

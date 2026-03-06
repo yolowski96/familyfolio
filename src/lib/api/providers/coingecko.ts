@@ -1,4 +1,5 @@
 import { PriceData } from '@/types';
+import { COINGECKO_API_KEY } from '@/lib/env';
 
 interface SearchResult {
   symbol: string;
@@ -296,8 +297,5 @@ export class CoinGeckoProvider {
   }
 }
 
-// Export singleton instance (without API key by default)
-export const coinGeckoProvider = new CoinGeckoProvider(
-  process.env.NEXT_PUBLIC_COINGECKO_API_KEY
-);
+export const coinGeckoProvider = new CoinGeckoProvider(COINGECKO_API_KEY);
 

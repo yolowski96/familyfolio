@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { priceService } from '@/lib/api/price-service';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { parseJsonBody } from '@/lib/api-utils';
 import { AssetType } from '@/types';
 
 interface BatchAsset {
@@ -85,8 +86,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     await getAuthUser();
-    const body: SearchBody = await request.json();
-    const { query, assetType } = body;
+    const parsed = await parseJsonBody<SearchBody>(request);
+    if (parsed.error) return parsed.error;
+    const { query, assetType } = parsed.data;
 
     if (!query) {
       return NextResponse.json(

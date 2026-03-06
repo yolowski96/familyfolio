@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { transactionRepository, holdingRepository } from '@/lib/db/repositories';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { parseJsonBody } from '@/lib/api-utils';
 import type { AssetType, TransactionType } from '@prisma/client';
 
 const VALID_ASSET_TYPES: AssetType[] = ['ETF', 'STOCK', 'CRYPTO'];
@@ -49,7 +50,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await getAuthUser();
-    const body = await request.json();
+    const parsed = await parseJsonBody(request);
+    if (parsed.error) return parsed.error;
+    const body = parsed.data as Record<string, unknown>;
 
     const requiredFields = [
       'personId', 'assetSymbol', 'assetName', 'assetType',
@@ -62,13 +65,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!VALID_ASSET_TYPES.includes(body.assetType)) {
+    if (!VALID_ASSET_TYPES.includes(body.assetType as AssetType)) {
       return NextResponse.json(
         { error: `assetType must be one of: ${VALID_ASSET_TYPES.join(', ')}` },
         { status: 400 }
       );
     }
-    if (!VALID_TRANSACTION_TYPES.includes(body.type)) {
+    if (!VALID_TRANSACTION_TYPES.includes(body.type as TransactionType)) {
       return NextResponse.json(
         { error: `type must be one of: ${VALID_TRANSACTION_TYPES.join(', ')}` },
         { status: 400 }
@@ -84,28 +87,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'totalAmount must be a non-negative number' }, { status: 400 });
     }
 
-    const date = new Date(body.date);
+    const date = new Date(body.date as string);
     if (isNaN(date.getTime())) {
       return NextResponse.json({ error: 'date must be a valid date' }, { status: 400 });
     }
 
     const transaction = await transactionRepository.create(user.id, {
-      personId: body.personId,
-      assetSymbol: body.assetSymbol.toUpperCase(),
-      assetName: body.assetName,
-      assetType: body.assetType,
-      type: body.type,
-      quantity: body.quantity,
-      pricePerUnit: body.pricePerUnit,
-      totalAmount: body.totalAmount,
-      currency: body.currency.toUpperCase(),
-      fee: body.fee || 0,
+      personId: body.personId as string,
+      assetSymbol: (body.assetSymbol as string).toUpperCase(),
+      assetName: body.assetName as string,
+      assetType: body.assetType as AssetType,
+      type: body.type as TransactionType,
+      quantity: body.quantity as number,
+      pricePerUnit: body.pricePerUnit as number,
+      totalAmount: body.totalAmount as number,
+      currency: (body.currency as string).toUpperCase(),
+      fee: (body.fee as number) || 0,
       date,
-      exchange: body.exchange,
-      notes: body.notes,
+      exchange: body.exchange as string | undefined,
+      notes: body.notes as string | undefined,
     });
 
-    await holdingRepository.recalculateFromTransactions(user.id, body.personId);
+    await holdingRepository.recalculateFromTransactions(user.id, body.personId as string);
     return NextResponse.json(transaction, { status: 201 });
   } catch (error) {
     if (error instanceof AuthError) return unauthorizedResponse();

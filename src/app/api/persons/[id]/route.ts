@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { personRepository } from '@/lib/db/repositories';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { parseJsonBody } from '@/lib/api-utils';
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -28,9 +29,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getAuthUser();
     const { id } = await params;
-    const body = await request.json();
+    const parsed = await parseJsonBody(request);
+    if (parsed.error) return parsed.error;
+    const body = parsed.data as Record<string, unknown>;
 
-    if (body.color && !/^#[0-9A-Fa-f]{6}$/.test(body.color)) {
+    if (body.color && !/^#[0-9A-Fa-f]{6}$/.test(body.color as string)) {
       return NextResponse.json(
         { error: 'Color must be a valid hex color (e.g., #FF5733)' },
         { status: 400 }
@@ -38,9 +41,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const updates: { name?: string; color?: string; isDefault?: boolean } = {};
-    if (body.name !== undefined) updates.name = body.name.trim();
-    if (body.color !== undefined) updates.color = body.color;
-    if (body.isDefault !== undefined) updates.isDefault = body.isDefault;
+    if (body.name !== undefined) updates.name = (body.name as string).trim();
+    if (body.color !== undefined) updates.color = body.color as string;
+    if (body.isDefault !== undefined) updates.isDefault = body.isDefault as boolean;
 
     const person = await personRepository.update(id, user.id, updates);
     return NextResponse.json(person);

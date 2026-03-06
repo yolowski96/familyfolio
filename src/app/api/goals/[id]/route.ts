@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { goalRepository } from '@/lib/db/repositories';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { parseJsonBody } from '@/lib/api-utils';
 import type { GoalType, AssetType } from '@prisma/client';
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -32,15 +33,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getAuthUser();
     const { id } = await params;
-    const body = await request.json();
+    const parsed = await parseJsonBody(request);
+    if (parsed.error) return parsed.error;
+    const body = parsed.data as Record<string, unknown>;
 
-    if (body.type && !VALID_GOAL_TYPES.includes(body.type)) {
+    if (body.type && !VALID_GOAL_TYPES.includes(body.type as GoalType)) {
       return NextResponse.json(
         { error: `type must be one of: ${VALID_GOAL_TYPES.join(', ')}` },
         { status: 400 }
       );
     }
-    if (body.assetType && !VALID_ASSET_TYPES.includes(body.assetType)) {
+    if (body.assetType && !VALID_ASSET_TYPES.includes(body.assetType as AssetType)) {
       return NextResponse.json(
         { error: `assetType must be one of: ${VALID_ASSET_TYPES.join(', ')}` },
         { status: 400 }
@@ -53,8 +56,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'currentValue must be a non-negative number' }, { status: 400 });
     }
 
-    if (body.name) body.name = body.name.trim();
-    if (body.assetSymbol) body.assetSymbol = body.assetSymbol.toUpperCase();
+    if (body.name) body.name = (body.name as string).trim();
+    if (body.assetSymbol) body.assetSymbol = (body.assetSymbol as string).toUpperCase();
 
     const goal = await goalRepository.update(id, user.id, body);
     return NextResponse.json(goal);

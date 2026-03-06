@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { transactionRepository, holdingRepository } from '@/lib/db/repositories';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { parseJsonBody } from '@/lib/api-utils';
 import type { AssetType, TransactionType } from '@prisma/client';
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -32,15 +33,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getAuthUser();
     const { id } = await params;
-    const body = await request.json();
+    const parsed = await parseJsonBody(request);
+    if (parsed.error) return parsed.error;
+    const body = parsed.data as Record<string, unknown>;
 
-    if (body.assetType && !VALID_ASSET_TYPES.includes(body.assetType)) {
+    if (body.assetType && !VALID_ASSET_TYPES.includes(body.assetType as AssetType)) {
       return NextResponse.json(
         { error: `assetType must be one of: ${VALID_ASSET_TYPES.join(', ')}` },
         { status: 400 }
       );
     }
-    if (body.type && !VALID_TRANSACTION_TYPES.includes(body.type)) {
+    if (body.type && !VALID_TRANSACTION_TYPES.includes(body.type as TransactionType)) {
       return NextResponse.json(
         { error: `type must be one of: ${VALID_TRANSACTION_TYPES.join(', ')}` },
         { status: 400 }
@@ -57,15 +60,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     if (body.date) {
-      const date = new Date(body.date);
+      const date = new Date(body.date as string);
       if (isNaN(date.getTime())) {
         return NextResponse.json({ error: 'date must be a valid date' }, { status: 400 });
       }
       body.date = date;
     }
 
-    if (body.assetSymbol) body.assetSymbol = body.assetSymbol.toUpperCase();
-    if (body.currency) body.currency = body.currency.toUpperCase();
+    if (body.assetSymbol) body.assetSymbol = (body.assetSymbol as string).toUpperCase();
+    if (body.currency) body.currency = (body.currency as string).toUpperCase();
 
     const transaction = await transactionRepository.update(id, user.id, body);
     await holdingRepository.recalculateFromTransactions(user.id, transaction.personId);
