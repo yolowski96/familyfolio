@@ -58,19 +58,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, formatQuantity } from "@/lib/utils"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
 import { usePortfolioWithPrices } from "@/hooks/usePortfolioWithPrices"
 import { AssetHolding, AssetType } from "@/types"
 import { AddTransactionDialog } from "@/components/transactions/AddTransactionDialog"
 import { AssetDetailSheet } from "@/components/holdings/AssetDetailSheet"
-
-function formatQuantity(value: number): string {
-  if (value >= 1) {
-    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-  }
-  return value.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 8 })
-}
 
 function formatPercent(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`

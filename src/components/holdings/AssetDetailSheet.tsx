@@ -46,17 +46,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, formatQuantity } from "@/lib/utils"
 import { useFilteredTransactions, usePortfolioStore, DbTransaction } from "@/store/usePortfolioStore"
 import { AssetHolding, AssetType } from "@/types"
 import { AddTransactionDialog } from "@/components/transactions/AddTransactionDialog"
-
-function formatQuantity(value: number): string {
-  if (value >= 1) {
-    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-  }
-  return value.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 8 })
-}
 
 function formatPercent(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
@@ -94,6 +87,8 @@ export function AssetDetailSheet({ asset, open, onOpenChange }: AssetDetailSheet
   const [editingTransaction, setEditingTransaction] = React.useState<DbTransaction | null>(null)
   const [editQuantity, setEditQuantity] = React.useState('')
   const [editPrice, setEditPrice] = React.useState('')
+  const [editTotalAmount, setEditTotalAmount] = React.useState('')
+  const [editLastEdited, setEditLastEdited] = React.useState<'quantity' | 'total' | null>(null)
   const [editDate, setEditDate] = React.useState('')
   const [editType, setEditType] = React.useState<'BUY' | 'SELL'>('BUY')
 
@@ -145,11 +140,58 @@ export function AssetDetailSheet({ asset, open, onOpenChange }: AssetDetailSheet
 
   const handleEditTransaction = (transaction: DbTransaction) => {
     setEditingTransaction(transaction)
-    setEditQuantity(transaction.quantity.toString())
-    setEditPrice(transaction.pricePerUnit.toString())
+    const qty = Number(transaction.quantity)
+    const price = Number(transaction.pricePerUnit)
+    setEditQuantity(qty.toString())
+    setEditPrice(price.toString())
+    setEditTotalAmount((qty * price).toFixed(2))
+    setEditLastEdited(null)
     setEditDate(transaction.date.split('T')[0])
     setEditType(transaction.type)
     setEditDialogOpen(true)
+  }
+
+  // Auto-calculate handlers for edit dialog
+  const handleEditPriceChange = (value: string) => {
+    setEditPrice(value)
+    const price = parseFloat(value)
+    if (!isNaN(price) && price > 0) {
+      if (editLastEdited === 'total' && editTotalAmount) {
+        const total = parseFloat(editTotalAmount)
+        if (!isNaN(total)) {
+          setEditQuantity((total / price).toString())
+        }
+      } else if (editLastEdited === 'quantity' && editQuantity) {
+        const qty = parseFloat(editQuantity)
+        if (!isNaN(qty)) {
+          setEditTotalAmount((qty * price).toFixed(2))
+        }
+      }
+    }
+  }
+
+  const handleEditQuantityChange = (value: string) => {
+    setEditQuantity(value)
+    setEditLastEdited('quantity')
+    const qty = parseFloat(value)
+    const price = parseFloat(editPrice)
+    if (!isNaN(qty) && !isNaN(price) && price > 0) {
+      setEditTotalAmount((qty * price).toFixed(2))
+    } else if (value === '') {
+      setEditTotalAmount('')
+    }
+  }
+
+  const handleEditTotalAmountChange = (value: string) => {
+    setEditTotalAmount(value)
+    setEditLastEdited('total')
+    const total = parseFloat(value)
+    const price = parseFloat(editPrice)
+    if (!isNaN(total) && !isNaN(price) && price > 0) {
+      setEditQuantity((total / price).toString())
+    } else if (value === '') {
+      setEditQuantity('')
+    }
   }
 
   const handleSaveEdit = async () => {
@@ -409,24 +451,42 @@ export function AssetDetailSheet({ asset, open, onOpenChange }: AssetDetailSheet
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="editQuantity">Quantity</Label>
-              <Input
-                id="editQuantity"
-                type="number"
-                step="any"
-                value={editQuantity}
-                onChange={(e) => setEditQuantity(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
               <Label htmlFor="editPrice">Price per Unit (EUR)</Label>
               <Input
                 id="editPrice"
                 type="number"
                 step="any"
                 value={editPrice}
-                onChange={(e) => setEditPrice(e.target.value)}
+                onChange={(e) => handleEditPriceChange(e.target.value)}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="editQuantity">Quantity</Label>
+                <Input
+                  id="editQuantity"
+                  type="number"
+                  step="any"
+                  value={editQuantity}
+                  onChange={(e) => handleEditQuantityChange(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Auto-calculates with total
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="editTotalAmount">Total Amount (EUR)</Label>
+                <Input
+                  id="editTotalAmount"
+                  type="number"
+                  step="any"
+                  value={editTotalAmount}
+                  onChange={(e) => handleEditTotalAmountChange(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Total = Quantity × Price
+                </p>
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="editDate">Date</Label>

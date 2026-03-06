@@ -22,3 +22,8 @@ export function formatCurrencyCompact(value: number): string {
     maximumFractionDigits: 0,
   }).format(value)
 }
+
+export function formatQuantity(value: number): string {
+  // Always show exactly 3 decimal places
+  return value.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+}

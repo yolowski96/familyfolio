@@ -45,17 +45,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { formatCurrencyCompact } from "@/lib/utils"
+import { formatCurrencyCompact, formatQuantity } from "@/lib/utils"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
 import { usePortfolioWithPrices } from "@/hooks/usePortfolioWithPrices"
 import { Goal, GoalType, AssetType } from "@/types"
-
-function formatQuantity(value: number): string {
-  if (value >= 1) {
-    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-  }
-  return value.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 8 })
-}
 
 const GOAL_TYPE_LABELS: Record<GoalType, string> = {
   PORTFOLIO_VALUE: 'Portfolio Value',

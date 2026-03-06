@@ -124,20 +124,37 @@ function calculateSummaryFromTransactions(
     const existing = holdingsMap.get(tx.assetSymbol);
     const quantity = Number(tx.quantity);
     const pricePerUnit = Number(tx.pricePerUnit);
-    const quantityDelta = tx.type === 'BUY' ? quantity : -quantity;
-    const costDelta = tx.type === 'BUY' ? quantity * pricePerUnit : 0;
 
     if (existing) {
-      existing.totalQuantity += quantityDelta;
-      existing.totalCost += costDelta;
+      if (tx.type === 'BUY') {
+        existing.totalQuantity += quantity;
+        existing.totalCost += quantity * pricePerUnit;
+      } else {
+        // SELL: reduce cost basis proportionally using average cost
+        const avgCost = existing.totalQuantity > 0 ? existing.totalCost / existing.totalQuantity : 0;
+        existing.totalQuantity -= quantity;
+        existing.totalCost -= quantity * avgCost;
+      }
     } else {
-      holdingsMap.set(tx.assetSymbol, {
-        symbol: tx.assetSymbol,
-        name: tx.assetName,
-        type: tx.assetType,
-        totalQuantity: quantityDelta,
-        totalCost: costDelta,
-      });
+      // First transaction for this asset
+      if (tx.type === 'BUY') {
+        holdingsMap.set(tx.assetSymbol, {
+          symbol: tx.assetSymbol,
+          name: tx.assetName,
+          type: tx.assetType,
+          totalQuantity: quantity,
+          totalCost: quantity * pricePerUnit,
+        });
+      } else {
+        // Selling without buying first (edge case)
+        holdingsMap.set(tx.assetSymbol, {
+          symbol: tx.assetSymbol,
+          name: tx.assetName,
+          type: tx.assetType,
+          totalQuantity: -quantity,
+          totalCost: 0,
+        });
+      }
     }
   }
 
@@ -357,8 +374,9 @@ export function usePortfolioWithPrices() {
   const holdings = usePortfolioStore((state) => state.holdings);
   const activePersonId = usePortfolioStore((state) => state.activePersonId);
 
-  // Prefer holdings if available, otherwise use transactions
-  const useHoldings = holdings.length > 0;
+  // Always calculate from transactions (source of truth) to ensure accurate P/L
+  // Database holdings may have stale totalInvested values after sells
+  const useHoldings = false;
 
   // Get unique assets from holdings or transactions
   const uniqueAssets = useMemo(() => {

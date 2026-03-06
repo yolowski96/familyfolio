@@ -246,7 +246,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
       if (lastEdited === 'total' && totalAmount) {
         const total = parseFloat(totalAmount);
         if (!isNaN(total)) {
-          setQuantity((total / price).toFixed(2));
+          setQuantity((total / price).toString());
         }
       } else if (lastEdited === 'quantity' && quantity) {
         const qty = parseFloat(quantity);
@@ -275,7 +275,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
     const total = parseFloat(value);
     const price = parseFloat(pricePerUnit);
     if (!isNaN(total) && !isNaN(price) && price > 0) {
-      setQuantity((total / price).toFixed(2));
+      setQuantity((total / price).toString());
     } else if (value === '') {
       setQuantity('');
     }

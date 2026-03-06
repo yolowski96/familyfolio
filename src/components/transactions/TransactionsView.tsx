@@ -61,18 +61,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, formatQuantity } from "@/lib/utils"
 import { useFilteredTransactions, usePortfolioStore, DbTransaction } from "@/store/usePortfolioStore"
 import { AssetType } from "@/types"
 import { AddTransactionDialog } from "@/components/transactions/AddTransactionDialog"
 import { toast } from "sonner"
-
-function formatQuantity(value: number): string {
-  if (value >= 1) {
-    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-  }
-  return value.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 8 })
-}
 
 const TYPE_COLORS: Record<AssetType, string> = {
   CRYPTO: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
