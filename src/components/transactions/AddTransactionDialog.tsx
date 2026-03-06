@@ -507,11 +507,10 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
                 {isSearching && (
                   <IconLoader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-4 animate-spin text-muted-foreground" />
                 )}
-              </div>
-              
-              {/* Search Results Dropdown */}
-              {showResults && searchResults.length > 0 && (
-                <div className="absolute z-50 w-[calc(100%-3rem)] mt-1 bg-popover border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                
+                {/* Search Results Dropdown - positioned relative to input */}
+                {showResults && searchResults.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-1 bg-popover border rounded-lg shadow-lg max-h-60 overflow-y-auto">
                   {searchResults.map((result, index) => (
                     <button
                       key={`${result.symbol}-${index}`}
@@ -543,14 +542,15 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
                     </button>
                   ))}
                 </div>
-              )}
-              
-              {/* No results message */}
-              {showResults && searchQuery.length >= 2 && searchResults.length === 0 && !isSearching && transactionType === 'BUY' && (
-                <div className="absolute z-50 w-[calc(100%-3rem)] mt-1 bg-popover border rounded-lg shadow-lg p-4 text-center text-muted-foreground">
-                  No results found. You can still add manually below.
-                </div>
-              )}
+                )}
+                
+                {/* No results message */}
+                {showResults && searchQuery.length >= 2 && searchResults.length === 0 && !isSearching && transactionType === 'BUY' && (
+                  <div className="absolute left-0 right-0 top-full z-50 mt-1 bg-popover border rounded-lg shadow-lg p-4 text-center text-muted-foreground">
+                    No results found. You can still add manually below.
+                  </div>
+                )}
+              </div>
               
               {/* No holdings message for SELL */}
               {transactionType === 'SELL' && existingHoldings.length === 0 && (

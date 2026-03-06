@@ -1,6 +1,6 @@
 'use client';
 
-import { IconMoon, IconSun, IconDeviceDesktop } from '@tabler/icons-react';
+import { IconMoon, IconSun } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -39,13 +39,6 @@ export function ThemeToggle() {
         >
           <IconMoon className="mr-2 size-4" />
           Dark
-        </DropdownMenuItem>
-        <DropdownMenuItem 
-          onClick={() => setTheme('system')}
-          className={theme === 'system' ? 'bg-accent' : ''}
-        >
-          <IconDeviceDesktop className="mr-2 size-4" />
-          System
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

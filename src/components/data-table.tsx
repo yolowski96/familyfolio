@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import {
-  IconPlus,
   IconTrendingDown,
   IconTrendingUp,
 } from "@tabler/icons-react"
@@ -72,13 +71,7 @@ export function DataTable() {
 
   return (
     <div className="w-full flex flex-col gap-4 px-4 lg:px-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Holdings</h2>
-        <Button variant="outline" size="sm">
-          <IconPlus />
-          <span className="hidden lg:inline">Add Transaction</span>
-        </Button>
-      </div>
+      <h2 className="text-lg font-semibold">Holdings</h2>
       <div className="overflow-hidden rounded-lg border">
         <Table>
           <TableHeader className="bg-muted">
