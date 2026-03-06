@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { IconPlus, IconSearch, IconLoader2, IconCoin, IconChartLine, IconChartPie } from '@tabler/icons-react';
+import { useState, useEffect } from 'react';
+import { IconPlus, IconLoader2 } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -21,365 +21,57 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { usePortfolioStore } from '@/store/usePortfolioStore';
 import { AssetType } from '@/types';
-import { format } from 'date-fns';
 import { cn, formatCurrency } from '@/lib/utils';
+import { useTransactionForm } from './hooks/useTransactionForm';
+import { AssetSearchInput } from './AssetSearchInput';
 
 interface AddTransactionDialogProps {
   children?: React.ReactNode;
 }
 
-interface SearchResult {
-  symbol: string;
-  name: string;
-  type: string;
-  assetType?: AssetType;
-  exchange?: string;
-  id?: string;
-  quantity?: number; // For existing holdings
-}
-
-// Debounce hook
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-}
-
 export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
-  const persons = usePortfolioStore((state) => state.persons);
-  const transactions = usePortfolioStore((state) => state.transactions);
-  const activePersonId = usePortfolioStore((state) => state.activePersonId);
-  const addTransactionAction = usePortfolioStore((state) => state.addTransaction);
-  const loadPersons = usePortfolioStore((state) => state.loadPersons);
   const [open, setOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   
-  // Form state
-  const [personId, setPersonId] = useState('');
-  const [assetType, setAssetType] = useState<AssetType>('STOCK');
-  const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>('BUY');
-  const [symbol, setSymbol] = useState('');
-  const [assetName, setAssetName] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [pricePerUnit, setPricePerUnit] = useState('');
-  const [totalAmount, setTotalAmount] = useState('');
-  const [lastEdited, setLastEdited] = useState<'quantity' | 'total' | null>(null);
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const {
+    formState,
+    isSaving,
+    setPersonId,
+    setAssetType,
+    setTransactionType,
+    setSymbol,
+    setAssetName,
+    setDate,
+    handlePricePerUnitChange,
+    handleQuantityChange,
+    handleTotalAmountChange,
+    handleSelectAsset,
+    handleSubmit,
+    resetForm,
+    existingHoldings,
+    selectedHolding,
+    isValid,
+    persons,
+  } = useTransactionForm(() => setOpen(false));
 
-  // Search state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
-
-  const debouncedQuery = useDebounce(searchQuery, 300);
-
-  // Calculate existing holdings for the selected person (for SELL mode)
-  const existingHoldings = useMemo(() => {
-    if (!personId) return [];
-
-    // Filter transactions for selected person
-    const personTransactions = transactions.filter(t => t.personId === personId);
-
-    // Group by symbol and calculate quantities
-    const holdingsMap = new Map<string, {
-      symbol: string;
-      name: string;
-      type: AssetType;
-      quantity: number;
-    }>();
-
-    for (const tx of personTransactions) {
-      const existing = holdingsMap.get(tx.assetSymbol);
-      const quantityDelta = tx.type === 'BUY' ? Number(tx.quantity) : -Number(tx.quantity);
-
-      if (existing) {
-        existing.quantity += quantityDelta;
-      } else {
-        holdingsMap.set(tx.assetSymbol, {
-          symbol: tx.assetSymbol,
-          name: tx.assetName,
-          type: tx.assetType,
-          quantity: quantityDelta,
-        });
-      }
-    }
-
-    // Filter out assets with zero or negative quantity
-    return Array.from(holdingsMap.values()).filter(h => h.quantity > 0);
-  }, [personId, transactions]);
-
-  // Track if this is the initial render to avoid resetting on mount
-  const isInitialMount = useRef(true);
-  const prevTransactionType = useRef(transactionType);
-  const prevPersonId = useRef(personId);
-
-  // Reset form and pre-select person when dialog opens
+  // Reset form when dialog opens
   useEffect(() => {
     if (open) {
-      // Load persons if not already loaded
-      if (persons.length === 0) {
-        loadPersons().catch(console.error);
-      }
-      // Reset form when opening
       resetForm();
-      // Pre-select person
-      const selectedPerson = activePersonId !== 'ALL' 
-        ? activePersonId 
-        : persons[0]?.id || '';
-      setPersonId(selectedPerson);
-      // Reset the initial mount flag so the reset effect works correctly
-      isInitialMount.current = true;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]); // Only trigger on open change, not on persons/activePersonId changes
+  }, [open, resetForm]);
 
-  // Search for assets when query changes (BUY mode: API search, SELL mode: filter existing)
-  useEffect(() => {
-    async function searchAssets() {
-      // For SELL mode, filter existing holdings locally
-      if (transactionType === 'SELL') {
-        // Only show results if user has typed something
-        if (debouncedQuery.length === 0) {
-          setSearchResults([]);
-          setShowResults(false);
-          return;
-        }
-        
-        // Filter holdings by query
-        const query = debouncedQuery.toLowerCase();
-        const filtered = existingHoldings.filter(h =>
-          h.symbol.toLowerCase().includes(query) ||
-          h.name.toLowerCase().includes(query)
-        );
-        setSearchResults(filtered.map(h => ({
-          symbol: h.symbol,
-          name: h.name,
-          type: h.type,
-          assetType: h.type,
-          quantity: h.quantity,
-        })));
-        setShowResults(filtered.length > 0);
-        setIsSearching(false);
-        return;
-      }
-
-      // For BUY mode, search via API
-      if (debouncedQuery.length < 2) {
-        setSearchResults([]);
-        setShowResults(false);
-        return;
-      }
-
-      setIsSearching(true);
-      try {
-        const response = await fetch('/api/prices', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            query: debouncedQuery,
-            assetType: assetType
-          }),
-        });
-
-        if (response.ok) {
-          const results = await response.json();
-          setSearchResults(results.slice(0, 8));
-          setShowResults(results.length > 0);
-        }
-      } catch (error) {
-        console.error('Search error:', error);
-      } finally {
-        setIsSearching(false);
-      }
-    }
-
-    searchAssets();
-  }, [debouncedQuery, assetType, transactionType, existingHoldings]);
-
-  // Reset when switching transaction type or person (but not on initial render)
-  useEffect(() => {
-    // Skip initial render and when dialog just opened
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      prevTransactionType.current = transactionType;
-      prevPersonId.current = personId;
-      return;
-    }
-
-    // Only reset if transaction type or person actually changed
-    if (prevTransactionType.current !== transactionType || prevPersonId.current !== personId) {
-      setSymbol('');
-      setAssetName('');
-      setQuantity('');
-      setPricePerUnit('');
-      setTotalAmount('');
-      setLastEdited(null);
-      setSearchQuery('');
-      setSearchResults([]);
-      setShowResults(false);
-      prevTransactionType.current = transactionType;
-      prevPersonId.current = personId;
-    }
-  }, [transactionType, personId]);
-
-  // Close search results when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setShowResults(false);
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const resetForm = () => {
-    setSymbol('');
-    setAssetName('');
-    setQuantity('');
-    setPricePerUnit('');
-    setTotalAmount('');
-    setLastEdited(null);
-    setDate(format(new Date(), 'yyyy-MM-dd'));
-    setTransactionType('BUY');
-    setAssetType('STOCK');
-    setSearchQuery('');
-    setSearchResults([]);
-    setShowResults(false);
-    setIsSaving(false);
-  };
-
-  // Auto-calculate quantity or total based on which field was edited last
-  const handlePricePerUnitChange = (value: string) => {
-    setPricePerUnit(value);
-    const price = parseFloat(value);
-    if (!isNaN(price) && price > 0) {
-      if (lastEdited === 'total' && totalAmount) {
-        const total = parseFloat(totalAmount);
-        if (!isNaN(total)) {
-          setQuantity((total / price).toString());
-        }
-      } else if (lastEdited === 'quantity' && quantity) {
-        const qty = parseFloat(quantity);
-        if (!isNaN(qty)) {
-          setTotalAmount((qty * price).toFixed(2));
-        }
-      }
-    }
-  };
-
-  const handleQuantityChange = (value: string) => {
-    setQuantity(value);
-    setLastEdited('quantity');
-    const qty = parseFloat(value);
-    const price = parseFloat(pricePerUnit);
-    if (!isNaN(qty) && !isNaN(price) && price > 0) {
-      setTotalAmount((qty * price).toFixed(2));
-    } else if (value === '') {
-      setTotalAmount('');
-    }
-  };
-
-  const handleTotalAmountChange = (value: string) => {
-    setTotalAmount(value);
-    setLastEdited('total');
-    const total = parseFloat(value);
-    const price = parseFloat(pricePerUnit);
-    if (!isNaN(total) && !isNaN(price) && price > 0) {
-      setQuantity((total / price).toString());
-    } else if (value === '') {
-      setQuantity('');
-    }
-  };
-
-  const handleSelectAsset = (result: SearchResult) => {
-    setSymbol(result.symbol);
-    setAssetName(result.name);
-    
-    // Set asset type based on result
-    if (result.assetType) {
-      setAssetType(result.assetType);
-    } else if (result.type) {
-      // Map Yahoo Finance types to our types
-      if (result.type === 'CRYPTOCURRENCY' || result.type === 'CRYPTO') {
-        setAssetType('CRYPTO');
-      } else if (result.type === 'ETF') {
-        setAssetType('ETF');
-      } else {
-        setAssetType('STOCK');
-      }
-    }
-    
-    setSearchQuery('');
-    setShowResults(false);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!personId || !symbol || !assetName || !quantity || !pricePerUnit) {
-      return;
-    }
-
-    // For SELL, validate quantity doesn't exceed holdings
-    if (transactionType === 'SELL') {
-      const holding = existingHoldings.find(h => h.symbol === symbol);
-      if (!holding || parseFloat(quantity) > holding.quantity) {
-        alert(`Cannot sell more than you own (${holding?.quantity || 0} ${symbol})`);
-        return;
-      }
-    }
-
-    setIsSaving(true);
-    try {
-      await addTransactionAction({
-        personId,
-        assetSymbol: symbol.toUpperCase(),
-        assetName,
-        assetType,
-        type: transactionType,
-        quantity: parseFloat(quantity),
-        pricePerUnit: parseFloat(pricePerUnit),
-        date: date,
-      });
-
-      resetForm();
-      setOpen(false);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const getAssetTypeIcon = (type: string) => {
-    switch (type) {
-      case 'CRYPTO':
-      case 'CRYPTOCURRENCY':
-        return <IconCoin className="size-4 text-amber-500" />;
-      case 'ETF':
-        return <IconChartPie className="size-4 text-purple-500" />;
-      default:
-        return <IconChartLine className="size-4 text-blue-500" />;
-    }
-  };
-
-  const selectedHolding = transactionType === 'SELL' 
-    ? existingHoldings.find(h => h.symbol === symbol) 
-    : null;
+  const {
+    personId,
+    assetType,
+    transactionType,
+    symbol,
+    assetName,
+    quantity,
+    pricePerUnit,
+    totalAmount,
+    date,
+  } = formState;
 
   return (
     <Dialog open={open} onOpenChange={(value) => !isSaving && setOpen(value)}>
@@ -407,13 +99,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
             {/* Person Selection */}
             <div className="grid gap-2">
               <Label htmlFor="person">Person</Label>
-              <Select value={personId} onValueChange={(v) => {
-                setPersonId(v);
-                // Reset asset selection when changing person
-                setSymbol('');
-                setAssetName('');
-                setSearchQuery('');
-              }}>
+              <Select value={personId} onValueChange={setPersonId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select person" />
                 </SelectTrigger>
@@ -470,11 +156,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
             {transactionType === 'BUY' && (
               <div className="grid gap-2">
                 <Label htmlFor="assetType">Asset Type</Label>
-                <Select value={assetType} onValueChange={(v) => {
-                  setAssetType(v as AssetType);
-                  setSearchQuery('');
-                  setSearchResults([]);
-                }}>
+                <Select value={assetType} onValueChange={(v) => setAssetType(v as AssetType)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
@@ -487,88 +169,13 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
               </div>
             )}
 
-            {/* Asset Search / Selection */}
-            <div className="grid gap-2" ref={searchRef}>
-              <Label htmlFor="search">
-                {transactionType === 'SELL' ? 'Select Asset to Sell' : 'Search Asset'}
-              </Label>
-              <div className="relative">
-                <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  id="search"
-                  placeholder={
-                    transactionType === 'SELL' 
-                      ? 'Search your holdings...' 
-                      : `Search ${assetType === 'CRYPTO' ? 'cryptocurrency' : assetType === 'ETF' ? 'ETF' : 'stock'}...`
-                  }
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    if (e.target.value.length > 0) {
-                      setShowResults(true);
-                    }
-                  }}
-                  onFocus={() => {
-                    // Only show results if there's a query and results exist
-                    if (searchQuery.length > 0 && searchResults.length > 0) {
-                      setShowResults(true);
-                    }
-                  }}
-                  className="pl-10"
-                />
-                {isSearching && (
-                  <IconLoader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-4 animate-spin text-muted-foreground" />
-                )}
-                
-                {/* Search Results Dropdown - positioned relative to input */}
-                {showResults && searchResults.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full z-50 mt-1 bg-popover border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {searchResults.map((result, index) => (
-                    <button
-                      key={`${result.symbol}-${index}`}
-                      type="button"
-                      onClick={() => handleSelectAsset(result)}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted transition-colors",
-                        index === 0 && "rounded-t-lg",
-                        index === searchResults.length - 1 && "rounded-b-lg"
-                      )}
-                    >
-                      {getAssetTypeIcon(result.assetType || result.type)}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{result.symbol}</span>
-                          {result.exchange && (
-                            <span className="text-xs text-muted-foreground">{result.exchange}</span>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground truncate">{result.name}</p>
-                      </div>
-                      {/* Show quantity for SELL mode */}
-                      {transactionType === 'SELL' && result.quantity !== undefined && (
-                        <div className="text-right">
-                          <span className="text-sm font-medium">{result.quantity.toLocaleString()}</span>
-                          <p className="text-xs text-muted-foreground">available</p>
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-                )}
-                
-                {/* No results message */}
-                {showResults && searchQuery.length >= 2 && searchResults.length === 0 && !isSearching && transactionType === 'BUY' && (
-                  <div className="absolute left-0 right-0 top-full z-50 mt-1 bg-popover border rounded-lg shadow-lg p-4 text-center text-muted-foreground">
-                    No results found. You can still add manually below.
-                  </div>
-                )}
-              </div>
-              
-              {/* No holdings message for SELL */}
-              {transactionType === 'SELL' && existingHoldings.length === 0 && (
-                <p className="text-sm text-muted-foreground">No assets available to sell in this portfolio.</p>
-              )}
-            </div>
+            {/* Asset Search */}
+            <AssetSearchInput
+              transactionType={transactionType}
+              assetType={assetType}
+              existingHoldings={existingHoldings}
+              onSelectAsset={handleSelectAsset}
+            />
 
             {/* Symbol and Name */}
             <div className="grid grid-cols-2 gap-4">
@@ -619,7 +226,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
               />
             </div>
 
-            {/* Quantity and Total Amount - auto-calculate between them */}
+            {/* Quantity and Total Amount */}
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="quantity">Quantity</Label>
@@ -691,7 +298,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
             </Button>
             <Button 
               type="submit"
-              disabled={!personId || !symbol || !assetName || !quantity || !pricePerUnit || isSaving}
+              disabled={!isValid || isSaving}
               className={transactionType === 'SELL' 
                 ? "bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white"
                 : "bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white"
