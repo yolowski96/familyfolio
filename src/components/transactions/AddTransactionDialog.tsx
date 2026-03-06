@@ -120,19 +120,26 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
     return Array.from(holdingsMap.values()).filter(h => h.quantity > 0);
   }, [personId, transactions]);
 
-  // Reset form and pre-select person when dialog opens/closes
+  // Track if this is the initial render to avoid resetting on mount
+  const isInitialMount = useRef(true);
+  const prevTransactionType = useRef(transactionType);
+  const prevPersonId = useRef(personId);
+
+  // Reset form and pre-select person when dialog opens
   useEffect(() => {
     if (open) {
       // Reset form when opening
       resetForm();
       // Pre-select person
-      if (activePersonId !== 'ALL') {
-        setPersonId(activePersonId);
-      } else if (persons.length > 0) {
-        setPersonId(persons[0].id);
-      }
+      const selectedPerson = activePersonId !== 'ALL' 
+        ? activePersonId 
+        : persons[0]?.id || '';
+      setPersonId(selectedPerson);
+      // Reset the initial mount flag so the reset effect works correctly
+      isInitialMount.current = true;
     }
-  }, [open, activePersonId, persons]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]); // Only trigger on open change, not on persons/activePersonId changes
 
   // Search for assets when query changes (BUY mode: API search, SELL mode: filter existing)
   useEffect(() => {
@@ -197,18 +204,30 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
     searchAssets();
   }, [debouncedQuery, assetType, transactionType, existingHoldings]);
 
-  // Reset when switching transaction type
+  // Reset when switching transaction type or person (but not on initial render)
   useEffect(() => {
-    // Clear form fields when switching modes
-    setSymbol('');
-    setAssetName('');
-    setQuantity('');
-    setPricePerUnit('');
-    setTotalAmount('');
-    setLastEdited(null);
-    setSearchQuery('');
-    setSearchResults([]);
-    setShowResults(false);
+    // Skip initial render and when dialog just opened
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      prevTransactionType.current = transactionType;
+      prevPersonId.current = personId;
+      return;
+    }
+
+    // Only reset if transaction type or person actually changed
+    if (prevTransactionType.current !== transactionType || prevPersonId.current !== personId) {
+      setSymbol('');
+      setAssetName('');
+      setQuantity('');
+      setPricePerUnit('');
+      setTotalAmount('');
+      setLastEdited(null);
+      setSearchQuery('');
+      setSearchResults([]);
+      setShowResults(false);
+      prevTransactionType.current = transactionType;
+      prevPersonId.current = personId;
+    }
   }, [transactionType, personId]);
 
   // Close search results when clicking outside
