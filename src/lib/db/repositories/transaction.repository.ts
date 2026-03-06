@@ -1,5 +1,6 @@
 import { prisma, handlePrismaError } from '../prisma';
 import type { Transaction, Prisma, AssetType, TransactionType } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 
 export type CreateTransactionInput = {
   personId: string;
@@ -110,11 +111,11 @@ export class TransactionRepository {
         assetName: data.assetName,
         assetType: data.assetType,
         type: data.type,
-        quantity: data.quantity,
-        pricePerUnit: data.pricePerUnit,
-        totalAmount: data.totalAmount,
+        quantity: new Decimal(data.quantity),
+        pricePerUnit: new Decimal(data.pricePerUnit),
+        totalAmount: new Decimal(data.totalAmount),
         currency: data.currency,
-        fee: data.fee || 0,
+        fee: new Decimal(data.fee || 0),
         date: new Date(data.date),
         exchange: data.exchange || null,
         notes: data.notes || null,
