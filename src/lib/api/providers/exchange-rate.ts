@@ -42,12 +42,8 @@ export class ExchangeRateProvider {
     if (this.ratesCache && 
         this.ratesCache.base === baseCurrency &&
         Date.now() - this.ratesCache.timestamp < this.cacheTTL) {
-      console.log(`💰 Using cached exchange rates (${baseCurrency})`);
       return this.ratesCache.rates;
     }
-    
-    // Cache miss or expired - fetch new rates
-    console.log(`🌐 Fetching fresh exchange rates (${baseCurrency})...`);
     
     try {
       const url = `${this.baseUrl}/${baseCurrency}`;
@@ -57,9 +53,7 @@ export class ExchangeRateProvider {
       if (!response.ok) {
         console.error('Exchange rate API error:', response.status);
         
-        // If we have stale cache, return it as fallback
         if (this.ratesCache && this.ratesCache.base === baseCurrency) {
-          console.warn('⚠️ Using stale cache as fallback');
           return this.ratesCache.rates;
         }
         
@@ -80,16 +74,12 @@ export class ExchangeRateProvider {
         timestamp: Date.now(),
       };
       
-      console.log(`✅ Cached ${Object.keys(data.rates).length} exchange rates for ${this.cacheTTL / 1000 / 60} minutes`);
-      
       return data.rates;
       
     } catch (error) {
       console.error('Error fetching exchange rates:', error);
       
-      // Return stale cache as fallback
       if (this.ratesCache && this.ratesCache.base === baseCurrency) {
-        console.warn('⚠️ Using stale cache due to fetch error');
         return this.ratesCache.rates;
       }
       
@@ -281,7 +271,6 @@ export class ExchangeRateProvider {
    */
   clearCache(): void {
     this.ratesCache = null;
-    console.log('🗑️ Exchange rate cache cleared');
   }
   
   /**

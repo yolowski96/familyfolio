@@ -225,8 +225,6 @@ export class PriceService {
 
     // OPTIMIZATION: If conversion needed, do it all at once
     if (convertTo) {
-      console.log(`💱 Converting ${results.size} prices to ${convertTo}...`);
-
       // Group prices by currency for efficient conversion
       const pricesBySourceCurrency = new Map<string, Array<[string, PriceData]>>();
 
@@ -275,9 +273,8 @@ export class PriceService {
               });
             }
 
-            console.log(`  ✓ Converted ${priceEntries.length} ${sourceCurrency} prices using rate ${rate.toFixed(4)}`);
           } else {
-            console.warn(`  ✗ Failed to get rate for ${sourceCurrency} → ${convertTo}`);
+            console.warn(`Failed to get exchange rate for ${sourceCurrency} → ${convertTo}`);
             // Keep original prices
             for (const [symbol, priceData] of priceEntries) {
               convertedResults.set(symbol, priceData);
@@ -286,7 +283,6 @@ export class PriceService {
         }
       }
 
-      console.log(`✅ Batch conversion complete`);
       return convertedResults;
     }
 

@@ -17,6 +17,35 @@ interface SearchResult {
 }
 
 /**
+ * Shared utility: fetch batch prices from POST /api/prices.
+ * Returns a plain object keyed by symbol. Swallows errors and returns {} on failure.
+ */
+export async function fetchBatchPrices(
+  assets: Array<{ symbol: string; assetType: AssetType }>,
+  convertTo?: string
+): Promise<Record<string, PriceData>> {
+  if (assets.length === 0) return {};
+
+  try {
+    const response = await fetch('/api/prices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assets, convertTo: convertTo || undefined }),
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch prices:', response.status);
+      return {};
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching prices:', error);
+    return {};
+  }
+}
+
+/**
  * Fetch prices for multiple assets
  * Auto-refreshes every 5 minutes
  */
@@ -24,27 +53,12 @@ export function usePrices(assets: Asset[], enabled: boolean = true) {
   return useQuery<Map<string, PriceData>, Error>({
     queryKey: ['prices', assets],
     queryFn: async () => {
-      if (assets.length === 0) return new Map<string, PriceData>();
-
-      const response = await fetch(
-        '/api/prices?' +
-          new URLSearchParams({
-            assets: JSON.stringify(assets),
-          })
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch prices');
-      }
-
-      const data = await response.json();
-
-      // Convert object back to Map
+      const data = await fetchBatchPrices(assets);
       return new Map<string, PriceData>(Object.entries(data));
     },
     enabled: enabled && assets.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchInterval: 5 * 60 * 1000, // Auto-refresh every 5 min
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
 }
 
@@ -89,7 +103,7 @@ export function useAssetSearch(query: string, assetType?: AssetType) {
   return useQuery<SearchResult[], Error>({
     queryKey: ['asset-search', query, assetType],
     queryFn: async () => {
-      const response = await fetch('/api/prices', {
+      const response = await fetch('/api/prices/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, assetType }),

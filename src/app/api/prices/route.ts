@@ -10,9 +10,9 @@ interface BatchAsset {
   exchange?: string;
 }
 
-interface SearchBody {
-  query: string;
-  assetType?: AssetType;
+interface BatchPricesBody {
+  assets: BatchAsset[];
+  convertTo?: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -20,62 +20,31 @@ export async function GET(request: NextRequest) {
     await getAuthUser();
     const { searchParams } = new URL(request.url);
 
-    // Optional currency conversion target
     const convertTo = searchParams.get('convertTo') || undefined;
-
-    // Single asset query
     const symbol = searchParams.get('symbol');
     const assetType = searchParams.get('type') as AssetType | null;
     const exchange = searchParams.get('exchange') || undefined;
 
-    if (symbol && assetType) {
-      const price = await priceService.getPrice(symbol, assetType, exchange, convertTo);
-
-      if (!price) {
-        return NextResponse.json(
-          { error: 'Price not found' },
-          { status: 404 }
-        );
-      }
-
-      return NextResponse.json(price);
+    if (!symbol || !assetType) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: symbol and type' },
+        { status: 400 }
+      );
     }
 
-    // Batch query
-    const assetsParam = searchParams.get('assets');
+    const price = await priceService.getPrice(symbol, assetType, exchange, convertTo);
 
-    if (assetsParam) {
-      try {
-        const assets: BatchAsset[] = JSON.parse(assetsParam);
-
-        if (!Array.isArray(assets)) {
-          return NextResponse.json(
-            { error: 'Assets must be an array' },
-            { status: 400 }
-          );
-        }
-
-        const prices = await priceService.batchGetPrices(assets, convertTo);
-
-        // Convert Map to Object for JSON serialization
-        const pricesObj = Object.fromEntries(prices);
-
-        return NextResponse.json(pricesObj);
-      } catch (parseError) {
-        return NextResponse.json(
-          { error: 'Invalid JSON in assets parameter' },
-          { status: 400 }
-        );
-      }
+    if (!price) {
+      return NextResponse.json(
+        { error: 'Price not found' },
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json(
-      { error: 'Missing required parameters (symbol+type OR assets)' },
-      { status: 400 }
-    );
+    return NextResponse.json(price);
   } catch (error) {
     if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('API error:', error);
+    console.error('GET /api/prices error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -86,34 +55,25 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     await getAuthUser();
-    const parsed = await parseJsonBody<SearchBody>(request);
+    const parsed = await parseJsonBody<BatchPricesBody>(request);
     if (parsed.error) return parsed.error;
-    const { query, assetType } = parsed.data;
+    const { assets, convertTo } = parsed.data;
 
-    if (!query) {
+    if (!assets || !Array.isArray(assets) || assets.length === 0) {
       return NextResponse.json(
-        { error: 'Query required' },
+        { error: 'assets array is required and must not be empty' },
         { status: 400 }
       );
     }
 
-    if (query.length < 1) {
-      return NextResponse.json(
-        { error: 'Query must be at least 1 character' },
-        { status: 400 }
-      );
-    }
-
-    const results = await priceService.search(query, assetType);
-
-    return NextResponse.json(results);
+    const prices = await priceService.batchGetPrices(assets, convertTo || undefined);
+    return NextResponse.json(Object.fromEntries(prices));
   } catch (error) {
     if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('Search API error:', error);
+    console.error('POST /api/prices error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
-

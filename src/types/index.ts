@@ -38,6 +38,7 @@ export interface AssetHolding {
   type: AssetType;
   totalQuantity: number;
   avgBuyPrice: number;
+  costBasis: number;
   currentPrice: number;
   totalValue: number;
   unrealizedPL: number;

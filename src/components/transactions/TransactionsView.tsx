@@ -22,6 +22,7 @@ export function TransactionsView() {
   const isInitialized = usePortfolioStore((state) => state.isInitialized);
   const storeLoading = usePortfolioStore((state) => state.isLoading);
   const loadPersons = usePortfolioStore((state) => state.loadPersons);
+  const loadTransactions = usePortfolioStore((state) => state.loadTransactions);
 
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
@@ -30,12 +31,15 @@ export function TransactionsView() {
 
   const filter = useTransactionsFilter(transactions, { activePersonId });
 
-  // Load persons if not already loaded (needed for person column and view name)
+  // Lazy-load transactions and persons when this page mounts
   React.useEffect(() => {
+    if (transactions.length === 0) {
+      loadTransactions().catch(console.error);
+    }
     if (persons.length === 0) {
       loadPersons().catch(console.error);
     }
-  }, [persons.length, loadPersons]);
+  }, [transactions.length, persons.length, loadTransactions, loadPersons]);
 
   const viewName = activePersonId === 'ALL'
     ? 'All Portfolios'

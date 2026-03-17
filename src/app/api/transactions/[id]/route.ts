@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { transactionRepository, holdingRepository } from '@/lib/db/repositories';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
 import { parseJsonBody } from '@/lib/api-utils';
+import { validatePersonOwnership } from '@/lib/api/validate-person';
 import type { AssetType, TransactionType } from '@prisma/client';
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -67,6 +68,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       body.date = date;
     }
 
+    if (body.personId) {
+      const personError = await validatePersonOwnership(body.personId as string, user.id);
+      if (personError) return personError;
+    }
+
     if (body.assetSymbol) body.assetSymbol = (body.assetSymbol as string).toUpperCase();
     if (body.currency) body.currency = (body.currency as string).toUpperCase();
 
@@ -94,9 +100,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
     }
 
-    // Recalculate holdings in background - don't block the response
-    holdingRepository.recalculateFromTransactions(user.id, personId)
-      .catch(err => console.error('Background holding recalculation failed:', err));
+    await holdingRepository.recalculateFromTransactions(user.id, personId);
 
     return NextResponse.json({ success: true, message: 'Transaction deleted successfully' });
   } catch (error) {

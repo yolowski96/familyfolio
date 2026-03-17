@@ -26,6 +26,21 @@ interface YahooChartResponse {
   };
 }
 
+interface YahooQuoteResponse {
+  quoteResponse?: {
+    result?: Array<{
+      symbol: string;
+      shortName?: string;
+      regularMarketPrice?: number;
+      regularMarketPreviousClose?: number;
+      regularMarketChange?: number;
+      regularMarketChangePercent?: number;
+      currency?: string;
+    }>;
+    error?: unknown;
+  };
+}
+
 interface YahooSearchResponse {
   quotes?: Array<{
     symbol: string;
@@ -37,7 +52,8 @@ interface YahooSearchResponse {
 }
 
 export class YahooFinanceProvider {
-  private readonly baseUrl = 'https://query1.finance.yahoo.com/v8/finance';
+  private readonly chartUrl = 'https://query1.finance.yahoo.com/v8/finance';
+  private readonly quoteUrl = 'https://query1.finance.yahoo.com/v7/finance/quote';
   private readonly searchUrl = 'https://query2.finance.yahoo.com/v1/finance/search';
   private readonly userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
 
@@ -47,7 +63,7 @@ export class YahooFinanceProvider {
   async fetchPrice(symbol: string, exchange?: string): Promise<PriceData | null> {
     try {
       const formattedSymbol = this.formatSymbol(symbol, exchange);
-      const url = `${this.baseUrl}/chart/${formattedSymbol}?interval=1d&range=1d`;
+      const url = `${this.chartUrl}/chart/${formattedSymbol}?interval=1d&range=1d`;
 
       const response = await fetch(url, {
         headers: {
@@ -96,35 +112,84 @@ export class YahooFinanceProvider {
   }
 
   /**
-   * Fetch prices for multiple symbols with rate limiting
+   * Fetch prices for multiple symbols using Yahoo's v7 quote endpoint.
+   * Sends a single HTTP request for up to 50 symbols at once.
+   * Falls back to individual chart requests for any symbols that fail.
    */
   async batchFetch(
     symbols: Array<{ symbol: string; exchange?: string }>
   ): Promise<Map<string, PriceData>> {
     const results = new Map<string, PriceData>();
-    const BATCH_SIZE = 5;
-    const DELAY_MS = 200;
+    if (symbols.length === 0) return results;
 
-    for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
-      const batch = symbols.slice(i, i + BATCH_SIZE);
+    const symbolMap = new Map(
+      symbols.map((s) => [this.formatSymbol(s.symbol, s.exchange), s.symbol])
+    );
+    const formattedSymbols = Array.from(symbolMap.keys());
 
-      // Fetch batch in parallel
-      const promises = batch.map(({ symbol, exchange }) =>
-        this.fetchPrice(symbol, exchange).then((data) => ({ symbol, data }))
-      );
+    const BATCH_SIZE = 50;
 
-      const batchResults = await Promise.all(promises);
+    for (let i = 0; i < formattedSymbols.length; i += BATCH_SIZE) {
+      const batch = formattedSymbols.slice(i, i + BATCH_SIZE);
+      const joined = batch.join(',');
 
-      // Add successful results to map
-      for (const { symbol, data } of batchResults) {
-        if (data) {
-          results.set(symbol, data);
+      try {
+        const url = `${this.quoteUrl}?symbols=${encodeURIComponent(joined)}&fields=regularMarketPrice,regularMarketPreviousClose,regularMarketChange,regularMarketChangePercent,currency,shortName`;
+        const response = await fetch(url, {
+          headers: { 'User-Agent': this.userAgent },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Quote API returned ${response.status}`);
         }
+
+        const data: YahooQuoteResponse = await response.json();
+        const quotes = data.quoteResponse?.result ?? [];
+
+        for (const quote of quotes) {
+          if (!quote.symbol || quote.regularMarketPrice == null) continue;
+
+          const originalSymbol = symbolMap.get(quote.symbol) ?? quote.symbol;
+          const previousClose = quote.regularMarketPreviousClose;
+          const change = quote.regularMarketChange ?? (previousClose ? quote.regularMarketPrice - previousClose : 0);
+          const changePercent = quote.regularMarketChangePercent ?? (previousClose && previousClose > 0 ? (change / previousClose) * 100 : 0);
+
+          results.set(originalSymbol, {
+            symbol: originalSymbol,
+            shortName: quote.shortName || originalSymbol,
+            price: quote.regularMarketPrice,
+            currency: quote.currency || 'USD',
+            change24h: change,
+            changePercent24h: changePercent,
+            chartPreviousClose: previousClose,
+            lastUpdated: new Date(),
+          });
+        }
+      } catch (error) {
+        console.error('Yahoo batch quote failed, falling back to individual requests:', error);
       }
 
-      // Delay between batches (except last batch)
-      if (i + BATCH_SIZE < symbols.length) {
-        await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
+      // Fall back to individual chart requests for any missing symbols
+      const missingSymbols = batch.filter(
+        (fs) => !results.has(symbolMap.get(fs) ?? fs)
+      );
+
+      if (missingSymbols.length > 0) {
+        const fallbackPromises = missingSymbols.map((fs) => {
+          const original = symbolMap.get(fs) ?? fs;
+          const entry = symbols.find((s) => s.symbol === original);
+          return this.fetchPrice(original, entry?.exchange).then((data) => ({
+            symbol: original,
+            data,
+          }));
+        });
+
+        const fallbackResults = await Promise.all(fallbackPromises);
+        for (const { symbol, data } of fallbackResults) {
+          if (data) {
+            results.set(symbol, data);
+          }
+        }
       }
     }
 

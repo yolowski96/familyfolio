@@ -80,7 +80,16 @@ export function AssetDetailSheet({ asset, open, onOpenChange }: AssetDetailSheet
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)
   const updateTransactionAction = usePortfolioStore((state) => state.updateTransaction)
+  const loadTransactions = usePortfolioStore((state) => state.loadTransactions)
+  const loadPersons = usePortfolioStore((state) => state.loadPersons)
   const [currentPage, setCurrentPage] = React.useState(0)
+
+  React.useEffect(() => {
+    if (open) {
+      if (transactions.length === 0) loadTransactions()
+      if (persons.length === 0) loadPersons()
+    }
+  }, [open, transactions.length, persons.length, loadTransactions, loadPersons])
   
   // Edit transaction state
   const [editDialogOpen, setEditDialogOpen] = React.useState(false)
@@ -299,7 +308,7 @@ export function AssetDetailSheet({ asset, open, onOpenChange }: AssetDetailSheet
                 <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">Cost Basis</p>
-                    <p className="font-medium">{formatCurrency(asset.totalQuantity * asset.avgBuyPrice)}</p>
+                    <p className="font-medium">{formatCurrency(asset.costBasis)}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Market Value</p>
@@ -325,7 +334,13 @@ export function AssetDetailSheet({ asset, open, onOpenChange }: AssetDetailSheet
                   <p className="text-muted-foreground text-sm">
                     {assetTransactions.length} transaction{assetTransactions.length !== 1 ? 's' : ''}
                   </p>
-                  <AddTransactionDialog>
+                  <AddTransactionDialog
+                    initialAsset={{
+                      assetType: asset.type,
+                      symbol: asset.symbol,
+                      assetName: asset.name,
+                    }}
+                  >
                     <Button size="sm" variant="outline" className="gap-1">
                       <IconPlus className="size-3" />
                       Add

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { goalRepository } from '@/lib/db/repositories';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
 import { parseJsonBody } from '@/lib/api-utils';
+import { validatePersonOwnership } from '@/lib/api/validate-person';
 import type { GoalType, AssetType } from '@prisma/client';
 
 const VALID_GOAL_TYPES: GoalType[] = ['PORTFOLIO_VALUE', 'MONTHLY_INVESTMENT', 'ASSET_TARGET', 'DIVERSIFICATION'];
@@ -65,6 +66,11 @@ export async function POST(request: NextRequest) {
       if (isNaN(deadline.getTime())) {
         return NextResponse.json({ error: 'deadline must be a valid date' }, { status: 400 });
       }
+    }
+
+    if (body.personId) {
+      const personError = await validatePersonOwnership(body.personId as string, user.id);
+      if (personError) return personError;
     }
 
     const goal = await goalRepository.create(user.id, {

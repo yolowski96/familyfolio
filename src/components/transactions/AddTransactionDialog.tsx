@@ -23,14 +23,15 @@ import {
 } from '@/components/ui/select';
 import { AssetType } from '@/types';
 import { cn, formatCurrency } from '@/lib/utils';
-import { useTransactionForm } from './hooks/useTransactionForm';
+import { useTransactionForm, InitialAssetData } from './hooks/useTransactionForm';
 import { AssetSearchInput } from './AssetSearchInput';
 
 interface AddTransactionDialogProps {
   children?: React.ReactNode;
+  initialAsset?: InitialAssetData;
 }
 
-export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
+export function AddTransactionDialog({ children, initialAsset }: AddTransactionDialogProps) {
   const [open, setOpen] = useState(false);
   
   const {
@@ -52,7 +53,7 @@ export function AddTransactionDialog({ children }: AddTransactionDialogProps) {
     selectedHolding,
     isValid,
     persons,
-  } = useTransactionForm(() => setOpen(false));
+  } = useTransactionForm(() => setOpen(false), initialAsset);
 
   // Reset form when dialog opens
   useEffect(() => {

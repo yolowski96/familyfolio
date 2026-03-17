@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { holdingRepository } from '@/lib/db/repositories';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
 import { parseJsonBody } from '@/lib/api-utils';
+import { validatePersonOwnership } from '@/lib/api/validate-person';
 import { priceService } from '@/lib/api/price-service';
 import type { AssetType } from '@prisma/client';
 
@@ -10,10 +11,16 @@ export async function GET(request: NextRequest) {
     const user = await getAuthUser();
     const { searchParams } = new URL(request.url);
     const personId = searchParams.get('personId');
+    const include = searchParams.get('include');
 
-    const holdings = personId
-      ? await holdingRepository.findByPersonId(user.id, personId)
-      : await holdingRepository.findAll(user.id);
+    let holdings;
+    if (personId) {
+      holdings = await holdingRepository.findByPersonId(user.id, personId);
+    } else if (include === 'relations') {
+      holdings = await holdingRepository.findAll(user.id);
+    } else {
+      holdings = await holdingRepository.findAllLean(user.id);
+    }
 
     return NextResponse.json(holdings);
   } catch (error) {
@@ -67,12 +74,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'personId is required for recalculation' }, { status: 400 });
       }
 
+      const personError = await validatePersonOwnership(personId as string, user.id);
+      if (personError) return personError;
+
       await holdingRepository.recalculateFromTransactions(user.id, personId as string);
       return NextResponse.json({ success: true, message: 'Holdings recalculated successfully' });
     }
 
+    if (action === 'recalculate-all') {
+      await holdingRepository.recalculateAll(user.id);
+      return NextResponse.json({ success: true, message: 'All holdings recalculated successfully' });
+    }
+
     return NextResponse.json(
-      { error: 'Invalid action. Supported actions: update-prices, recalculate' },
+      { error: 'Invalid action. Supported actions: update-prices, recalculate, recalculate-all' },
       { status: 400 }
     );
   } catch (error) {

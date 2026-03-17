@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { goalRepository } from '@/lib/db/repositories';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
 import { parseJsonBody } from '@/lib/api-utils';
+import { validatePersonOwnership } from '@/lib/api/validate-person';
 import type { GoalType, AssetType } from '@prisma/client';
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -54,6 +55,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
     if (body.currentValue !== undefined && (typeof body.currentValue !== 'number' || body.currentValue < 0)) {
       return NextResponse.json({ error: 'currentValue must be a non-negative number' }, { status: 400 });
+    }
+
+    if (body.personId) {
+      const personError = await validatePersonOwnership(body.personId as string, user.id);
+      if (personError) return personError;
     }
 
     if (body.name) body.name = (body.name as string).trim();

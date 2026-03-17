@@ -57,8 +57,15 @@ export interface UseTransactionFormReturn {
   persons: DbPerson[];
 }
 
+export interface InitialAssetData {
+  assetType: AssetType;
+  symbol: string;
+  assetName: string;
+}
+
 export function useTransactionForm(
-  onSuccess?: () => void
+  onSuccess?: () => void,
+  initialAsset?: InitialAssetData,
 ): UseTransactionFormReturn {
   const persons = usePortfolioStore((state) => state.persons);
   const transactions = usePortfolioStore((state) => state.transactions);
@@ -129,8 +136,14 @@ export function useTransactionForm(
     }
 
     if (prevTransactionType.current !== transactionType || prevPersonId.current !== personId) {
-      setSymbol('');
-      setAssetName('');
+      if (initialAsset) {
+        setSymbol(initialAsset.symbol);
+        setAssetName(initialAsset.assetName);
+        setAssetType(initialAsset.assetType);
+      } else {
+        setSymbol('');
+        setAssetName('');
+      }
       setQuantity('');
       setPricePerUnit('');
       setTotalAmount('');
@@ -138,7 +151,7 @@ export function useTransactionForm(
       prevTransactionType.current = transactionType;
       prevPersonId.current = personId;
     }
-  }, [transactionType, personId]);
+  }, [transactionType, personId, initialAsset]);
 
   const resetForm = useCallback(() => {
     setSymbol('');
@@ -162,8 +175,15 @@ export function useTransactionForm(
       ? activePersonId
       : persons[0]?.id || '';
     setPersonId(selectedPerson);
+
+    if (initialAsset) {
+      setAssetType(initialAsset.assetType);
+      setSymbol(initialAsset.symbol);
+      setAssetName(initialAsset.assetName);
+    }
+
     isInitialMount.current = true;
-  }, [persons, activePersonId, loadPersons, resetForm]);
+  }, [persons, activePersonId, loadPersons, resetForm, initialAsset]);
 
   // Auto-calculate handlers
   const handlePricePerUnitChange = useCallback((value: string) => {
@@ -277,8 +297,13 @@ export function useTransactionForm(
     isSaving,
     setPersonId: (id: string) => {
       setPersonId(id);
-      setSymbol('');
-      setAssetName('');
+      if (initialAsset) {
+        setSymbol(initialAsset.symbol);
+        setAssetName(initialAsset.assetName);
+      } else {
+        setSymbol('');
+        setAssetName('');
+      }
     },
     setAssetType,
     setTransactionType,

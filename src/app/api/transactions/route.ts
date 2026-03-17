@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { transactionRepository, holdingRepository } from '@/lib/db/repositories';
 import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
 import { parseJsonBody } from '@/lib/api-utils';
+import { validatePersonOwnership } from '@/lib/api/validate-person';
 import type { AssetType, TransactionType } from '@prisma/client';
 
 const VALID_ASSET_TYPES: AssetType[] = ['ETF', 'STOCK', 'CRYPTO'];
@@ -92,6 +93,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'date must be a valid date' }, { status: 400 });
     }
 
+    const personError = await validatePersonOwnership(body.personId as string, user.id);
+    if (personError) return personError;
+
     const transactionData = {
       personId: body.personId as string,
       assetSymbol: (body.assetSymbol as string).toUpperCase(),
@@ -110,8 +114,7 @@ export async function POST(request: NextRequest) {
 
     const transaction = await transactionRepository.create(user.id, transactionData);
 
-    // Update holding in background - don't wait for it to return response faster
-    holdingRepository.updateHoldingForTransaction(user.id, transactionData.personId, {
+    await holdingRepository.updateHoldingForTransaction(user.id, transactionData.personId, {
       assetSymbol: transactionData.assetSymbol,
       assetName: transactionData.assetName,
       assetType: transactionData.assetType,
@@ -121,7 +124,7 @@ export async function POST(request: NextRequest) {
       totalAmount: transactionData.totalAmount,
       fee: transactionData.fee,
       currency: transactionData.currency,
-    }).catch(err => console.error('Background holding update failed:', err));
+    });
 
     return NextResponse.json({ transaction }, { status: 201 });
   } catch (error) {

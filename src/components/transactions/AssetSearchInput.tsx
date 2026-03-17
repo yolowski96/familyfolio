@@ -78,7 +78,7 @@ export function AssetSearchInput({
 
       setIsSearching(true);
       try {
-        const response = await fetch('/api/prices', {
+        const response = await fetch('/api/prices/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

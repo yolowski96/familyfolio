@@ -525,16 +525,17 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
     
     set({ isLoading: true, error: null });
     try {
-      // Only load transactions initially - it's needed on most pages
-      // Holdings, persons, goals are loaded on-demand when needed
-      await get().loadTransactions();
+      // Load holdings initially - needed for the dashboard summary.
+      // Holdings are a small dataset (one row per asset) vs transactions (many rows).
+      // Transactions are loaded on-demand when the user visits the transactions page.
+      await get().loadHoldings();
       set({ isLoading: false, isInitialized: true });
     } catch (error) {
       console.error('Error loading all data:', error);
       set({ 
         error: error instanceof Error ? error.message : 'Failed to load data', 
         isLoading: false,
-        isInitialized: true, // Mark as initialized even on error to prevent infinite retries
+        isInitialized: true,
       });
     }
   },

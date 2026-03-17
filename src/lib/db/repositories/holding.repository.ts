@@ -1,5 +1,5 @@
 import { prisma, handlePrismaError } from '../prisma';
-import type { Holding, AssetType } from '@prisma/client';
+import type { Holding, AssetType, Prisma } from '@prisma/client';
 import Decimal from 'decimal.js';
 
 export type UpdateHoldingInput = {
@@ -55,6 +55,30 @@ export class HoldingRepository {
       return await prisma.holding.findMany({
         where: { userId, quantity: { gt: 0 } },
         include: includeRelations,
+        orderBy: { currentValue: 'desc' },
+      });
+    } catch (error) {
+      console.error('Error fetching holdings:', error);
+      throw new Error(handlePrismaError(error));
+    }
+  }
+
+  async findAllLean(userId: string) {
+    try {
+      return await prisma.holding.findMany({
+        where: { userId, quantity: { gt: 0 } },
+        select: {
+          id: true,
+          personId: true,
+          assetSymbol: true,
+          assetName: true,
+          assetType: true,
+          quantity: true,
+          averagePrice: true,
+          totalInvested: true,
+          currentPrice: true,
+          currency: true,
+        },
         orderBy: { currentValue: 'desc' },
       });
     } catch (error) {
@@ -132,10 +156,8 @@ export class HoldingRepository {
       if (tx.type === 'BUY') {
         const quantity = new Decimal(tx.quantity);
         const pricePerUnit = new Decimal(tx.pricePerUnit);
-        const fee = new Decimal(tx.fee);
-        const totalCost = new Decimal(tx.totalAmount).plus(fee);
+        const totalCost = quantity.times(pricePerUnit);
 
-        // Single atomic upsert using raw SQL - calculates weighted average in the query
         await prisma.$executeRaw`
           INSERT INTO holdings (
             id, user_id, person_id, asset_symbol, asset_name, asset_type,
@@ -206,33 +228,53 @@ export class HoldingRepository {
         const holding = holdingsMap.get(key)!;
         const quantity = new Decimal(tx.quantity.toString());
         const pricePerUnit = new Decimal(tx.pricePerUnit.toString());
-        const fee = new Decimal(tx.fee.toString());
-        const total = new Decimal(tx.totalAmount.toString()).plus(fee);
+        const cost = quantity.times(pricePerUnit);
 
         if (tx.type === 'BUY') {
           holding.quantity = holding.quantity.plus(quantity);
-          holding.totalInvested = holding.totalInvested.plus(total);
-          holding.weightedPriceSum = holding.weightedPriceSum.plus(quantity.times(pricePerUnit));
+          holding.totalInvested = holding.totalInvested.plus(cost);
+          holding.weightedPriceSum = holding.weightedPriceSum.plus(cost);
         } else if (tx.type === 'SELL') {
           if (holding.quantity.gt(0)) {
             const avgPrice = holding.weightedPriceSum.div(holding.quantity);
             holding.quantity = holding.quantity.minus(quantity);
             const soldValue = quantity.times(avgPrice);
             holding.totalInvested = holding.totalInvested.minus(soldValue);
-            holding.weightedPriceSum = holding.weightedPriceSum.minus(quantity.times(avgPrice));
+            holding.weightedPriceSum = holding.weightedPriceSum.minus(soldValue);
           }
         }
       }
 
-      // Build batch operations
-      const upsertOperations: Promise<Holding>[] = [];
-      const symbolsToKeep = new Set<string>();
+      // Build batch operations for a single atomic transaction
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const operations: Prisma.PrismaPromise<any>[] = [];
 
+      // Find symbols to delete (zero quantity or orphaned)
+      const symbolsToDelete: string[] = [];
+      for (const [symbol, holdingData] of holdingsMap) {
+        if (holdingData.quantity.lte(0)) {
+          symbolsToDelete.push(symbol);
+        }
+      }
+      for (const existing of existingHoldings) {
+        if (!holdingsMap.has(existing.assetSymbol)) {
+          symbolsToDelete.push(existing.assetSymbol);
+        }
+      }
+
+      if (symbolsToDelete.length > 0) {
+        operations.push(
+          prisma.holding.deleteMany({
+            where: { userId, personId, assetSymbol: { in: symbolsToDelete } },
+          })
+        );
+      }
+
+      // Build upserts for holdings with positive quantity
       for (const [, holdingData] of holdingsMap) {
         if (holdingData.quantity.gt(0)) {
-          symbolsToKeep.add(holdingData.assetSymbol);
           const avgPrice = holdingData.weightedPriceSum.div(holdingData.quantity);
-          upsertOperations.push(
+          operations.push(
             prisma.holding.upsert({
               where: { unique_person_asset: { personId, assetSymbol: holdingData.assetSymbol } },
               update: {
@@ -257,32 +299,9 @@ export class HoldingRepository {
         }
       }
 
-      // Find symbols to delete (either zero quantity or orphaned)
-      const symbolsToDelete: string[] = [];
-      for (const [symbol, holdingData] of holdingsMap) {
-        if (holdingData.quantity.lte(0)) {
-          symbolsToDelete.push(symbol);
-        }
-      }
-      for (const existing of existingHoldings) {
-        if (!holdingsMap.has(existing.assetSymbol)) {
-          symbolsToDelete.push(existing.assetSymbol);
-        }
-      }
-
-      // Execute all operations in parallel using a transaction
-      await prisma.$transaction([
-        // Batch delete all holdings that should be removed
-        ...(symbolsToDelete.length > 0 ? [
-          prisma.holding.deleteMany({
-            where: { userId, personId, assetSymbol: { in: symbolsToDelete } },
-          })
-        ] : []),
-      ]);
-
-      // Execute upserts in parallel (outside transaction for better performance)
-      if (upsertOperations.length > 0) {
-        await Promise.all(upsertOperations);
+      // Execute all deletes and upserts in a single atomic transaction
+      if (operations.length > 0) {
+        await prisma.$transaction(operations);
       }
     } catch (error) {
       console.error('Error recalculating holdings:', error);
@@ -290,35 +309,54 @@ export class HoldingRepository {
     }
   }
 
+  async recalculateAll(userId: string): Promise<void> {
+    try {
+      const persons = await prisma.person.findMany({
+        where: { userId },
+        select: { id: true },
+      });
+
+      for (const person of persons) {
+        await this.recalculateFromTransactions(userId, person.id);
+      }
+    } catch (error) {
+      console.error('Error recalculating all holdings:', error);
+      throw new Error(handlePrismaError(error));
+    }
+  }
+
   async updatePrices(userId: string, prices: Map<string, number>): Promise<number> {
     try {
-      const holdings = await this.findAll(userId);
-      let updatedCount = 0;
+      if (prices.size === 0) return 0;
 
-      for (const holding of holdings) {
-        const currentPrice = prices.get(holding.assetSymbol);
-        if (currentPrice !== undefined) {
-          const quantity = new Decimal(holding.quantity.toString());
-          const totalInvested = new Decimal(holding.totalInvested.toString());
-          const currentValue = quantity.times(currentPrice);
-          const profitLoss = currentValue.minus(totalInvested);
-          const profitLossPercent = totalInvested.gt(0)
-            ? profitLoss.div(totalInvested).times(100)
-            : new Decimal(0);
-
-          await prisma.holding.update({
-            where: { id: holding.id },
-            data: {
-              currentPrice,
-              currentValue: currentValue.toNumber(),
-              profitLoss: profitLoss.toNumber(),
-              profitLossPercent: profitLossPercent.toNumber(),
-              lastPriceUpdate: new Date(),
-            },
-          });
-          updatedCount++;
-        }
+      const symbols: string[] = [];
+      const priceValues: number[] = [];
+      for (const [symbol, price] of prices) {
+        symbols.push(symbol);
+        priceValues.push(price);
       }
+
+      // Single query: UPDATE all holdings with computed current_value, profit_loss, profit_loss_percent
+      const updatedCount = await prisma.$executeRaw`
+        UPDATE holdings AS h SET
+          current_price = v.price,
+          current_value = h.quantity * v.price,
+          profit_loss = (h.quantity * v.price) - h.total_invested,
+          profit_loss_percent = CASE
+            WHEN h.total_invested > 0
+            THEN (((h.quantity * v.price) - h.total_invested) / h.total_invested) * 100
+            ELSE 0
+          END,
+          last_price_update = NOW(),
+          updated_at = NOW()
+        FROM (
+          SELECT unnest(${symbols}::text[]) AS symbol,
+                 unnest(${priceValues}::double precision[]) AS price
+        ) AS v
+        WHERE h.user_id = ${userId}
+          AND h.asset_symbol = v.symbol
+          AND h.quantity > 0
+      `;
 
       return updatedCount;
     } catch (error) {
