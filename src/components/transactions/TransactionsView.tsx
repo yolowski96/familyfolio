@@ -31,11 +31,16 @@ export function TransactionsView() {
 
   const filter = useTransactionsFilter(transactions, { activePersonId });
 
+  const didFetch = React.useRef(false);
   React.useEffect(() => {
+    if (didFetch.current) return;
     const needed: ('transactions' | 'persons')[] = [];
     if (storeTransactions.length === 0) needed.push('transactions');
     if (persons.length === 0) needed.push('persons');
-    if (needed.length > 0) loadBatch(needed).catch(console.error);
+    if (needed.length > 0) {
+      didFetch.current = true;
+      loadBatch(needed).catch(console.error);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const viewName = activePersonId === 'ALL'

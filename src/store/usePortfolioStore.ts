@@ -135,6 +135,8 @@ interface PortfolioState {
 // STORE IMPLEMENTATION
 // =============================================================================
 
+const inflightBatch = new Map<string, Promise<void>>();
+
 export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
   // Initial state
   persons: [],
@@ -538,22 +540,33 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
   },
 
   loadBatch: async (parts) => {
-    try {
-      const response = await fetch(`/api/portfolio?include=${parts.join(',')}`);
-      if (!response.ok) {
+    const key = [...parts].sort().join(',');
+    const existing = inflightBatch.get(key);
+    if (existing) return existing;
+
+    const promise = (async () => {
+      try {
+        const response = await fetch(`/api/portfolio?include=${parts.join(',')}`);
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'Failed to load portfolio data');
+        }
         const data = await response.json();
-        throw new Error(data.error || 'Failed to load portfolio data');
+        const updates: Partial<PortfolioState> = {};
+        if (data.transactions) updates.transactions = data.transactions;
+        if (data.persons) updates.persons = data.persons;
+        if (data.holdings) updates.holdings = data.holdings;
+        set(updates);
+      } catch (error) {
+        console.error('Error loading batch:', error);
+        throw error;
+      } finally {
+        inflightBatch.delete(key);
       }
-      const data = await response.json();
-      const updates: Partial<PortfolioState> = {};
-      if (data.transactions) updates.transactions = data.transactions;
-      if (data.persons) updates.persons = data.persons;
-      if (data.holdings) updates.holdings = data.holdings;
-      set(updates);
-    } catch (error) {
-      console.error('Error loading batch:', error);
-      throw error;
-    }
+    })();
+
+    inflightBatch.set(key, promise);
+    return promise;
   },
   
   clearError: () => set({ error: null }),

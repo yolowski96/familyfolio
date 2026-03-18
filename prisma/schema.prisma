@@ -110,6 +110,8 @@ model Holding {
   @@unique([personId, assetSymbol], name: "unique_person_asset")
   @@index([userId], name: "idx_holding_user")
   @@index([personId], name: "idx_holding_person")
+  @@index([userId, assetSymbol], name: "idx_holding_user_asset")
+  @@index([userId, currentValue(sort: Desc)], name: "idx_holding_user_value")
   @@map("holdings")
 }
 
@@ -135,6 +137,7 @@ model Goal {
 
   @@index([userId], name: "idx_goal_user")
   @@index([personId], name: "idx_goal_person")
+  @@index([userId, isCompleted, deadline], name: "idx_goal_user_incomplete")
   @@map("goals")
 }
 

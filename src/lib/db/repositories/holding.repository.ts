@@ -77,6 +77,7 @@ export class HoldingRepository {
           averagePrice: true,
           totalInvested: true,
           currentPrice: true,
+          currentValue: true,
           currency: true,
         },
         orderBy: { currentValue: 'desc' },
@@ -196,10 +197,18 @@ export class HoldingRepository {
 
   async recalculateFromTransactions(userId: string, personId: string): Promise<void> {
     try {
-      // Fetch transactions and existing holdings in parallel
       const [transactions, existingHoldings] = await Promise.all([
         prisma.transaction.findMany({
           where: { userId, personId },
+          select: {
+            assetSymbol: true,
+            assetName: true,
+            assetType: true,
+            type: true,
+            quantity: true,
+            pricePerUnit: true,
+            currency: true,
+          },
           orderBy: { date: 'asc' },
         }),
         prisma.holding.findMany({
@@ -316,9 +325,9 @@ export class HoldingRepository {
         select: { id: true },
       });
 
-      for (const person of persons) {
-        await this.recalculateFromTransactions(userId, person.id);
-      }
+      await Promise.all(
+        persons.map((person) => this.recalculateFromTransactions(userId, person.id))
+      );
     } catch (error) {
       console.error('Error recalculating all holdings:', error);
       throw new Error(handlePrismaError(error));
@@ -367,10 +376,8 @@ export class HoldingRepository {
 
   async delete(id: string, userId: string): Promise<void> {
     try {
-      const existing = await prisma.holding.findFirst({ where: { id, userId } });
-      if (!existing) throw new Error('Holding not found');
-
-      await prisma.holding.delete({ where: { id } });
+      const { count } = await prisma.holding.deleteMany({ where: { id, userId } });
+      if (count === 0) throw new Error('Holding not found');
     } catch (error) {
       console.error('Error deleting holding:', error);
       throw new Error(handlePrismaError(error));

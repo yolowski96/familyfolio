@@ -84,12 +84,16 @@ export function AssetDetailSheet({ asset, open, onOpenChange }: AssetDetailSheet
   const loadBatch = usePortfolioStore((state) => state.loadBatch)
   const [currentPage, setCurrentPage] = React.useState(0)
 
+  const didFetch = React.useRef(false)
   React.useEffect(() => {
-    if (!open) return
+    if (!open || didFetch.current) return
     const needed: ('transactions' | 'persons')[] = []
     if (storeTransactions.length === 0) needed.push('transactions')
     if (persons.length === 0) needed.push('persons')
-    if (needed.length > 0) loadBatch(needed)
+    if (needed.length > 0) {
+      didFetch.current = true
+      loadBatch(needed)
+    }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   
   // Edit transaction state

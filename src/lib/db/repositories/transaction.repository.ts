@@ -160,13 +160,18 @@ export class TransactionRepository {
 
   async update(id: string, userId: string, data: UpdateTransactionInput): Promise<TransactionWithRelations> {
     try {
-      const existing = await prisma.transaction.findFirst({ where: { id, userId } });
-      if (!existing) throw new Error('Transaction not found');
-
       if (data.assetSymbol && data.assetName && data.assetType) {
-        await this.ensureAssetExists(
-          data.assetSymbol, data.assetName, data.assetType, data.currency || 'USD', data.exchange
-        );
+        await prisma.asset.upsert({
+          where: { symbol: data.assetSymbol },
+          update: { name: data.assetName, exchange: data.exchange },
+          create: {
+            symbol: data.assetSymbol,
+            name: data.assetName,
+            type: data.assetType,
+            currency: data.currency || 'USD',
+            exchange: data.exchange,
+          },
+        });
       }
 
       const updateData: Prisma.TransactionUncheckedUpdateInput = {};
@@ -183,11 +188,16 @@ export class TransactionRepository {
       if (data.exchange !== undefined) updateData.exchange = data.exchange;
       if (data.notes !== undefined) updateData.notes = data.notes;
 
-      return await prisma.transaction.update({
-        where: { id },
+      const result = await prisma.transaction.updateMany({
+        where: { id, userId },
         data: updateData,
-        include: includeRelations,
       });
+      if (result.count === 0) throw new Error('Transaction not found');
+
+      return await prisma.transaction.findFirst({
+        where: { id },
+        include: includeRelations,
+      }) as TransactionWithRelations;
     } catch (error) {
       console.error('Error updating transaction:', error);
       throw new Error(handlePrismaError(error));
@@ -196,10 +206,8 @@ export class TransactionRepository {
 
   async delete(id: string, userId: string): Promise<void> {
     try {
-      const existing = await prisma.transaction.findFirst({ where: { id, userId } });
-      if (!existing) throw new Error('Transaction not found');
-
-      await prisma.transaction.delete({ where: { id } });
+      const { count } = await prisma.transaction.deleteMany({ where: { id, userId } });
+      if (count === 0) throw new Error('Transaction not found');
     } catch (error) {
       console.error('Error deleting transaction:', error);
       throw new Error(handlePrismaError(error));
@@ -256,17 +264,6 @@ export class TransactionRepository {
     }
   }
 
-  private async ensureAssetExists(
-    symbol: string, name: string, type: AssetType, currency: string, exchange?: string
-  ): Promise<void> {
-    const exists = await prisma.asset.findUnique({ where: { symbol } });
-
-    if (!exists) {
-      await prisma.asset.create({ data: { symbol, name, type, currency, exchange } });
-    } else if (exists.name !== name || exists.exchange !== exchange) {
-      await prisma.asset.update({ where: { symbol }, data: { name, exchange } });
-    }
-  }
 }
 
 export const transactionRepository = new TransactionRepository();

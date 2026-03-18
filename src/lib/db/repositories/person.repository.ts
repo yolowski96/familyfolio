@@ -58,10 +58,16 @@ export class PersonRepository {
   async create(userId: string, data: CreatePersonInput): Promise<Person> {
     try {
       if (data.isDefault) {
-        await prisma.person.updateMany({
-          where: { userId, isDefault: true },
-          data: { isDefault: false },
-        });
+        const [, person] = await prisma.$transaction([
+          prisma.person.updateMany({
+            where: { userId, isDefault: true },
+            data: { isDefault: false },
+          }),
+          prisma.person.create({
+            data: { ...data, userId },
+          }),
+        ]);
+        return person;
       }
 
       return await prisma.person.create({
@@ -75,20 +81,29 @@ export class PersonRepository {
 
   async update(id: string, userId: string, data: UpdatePersonInput): Promise<Person> {
     try {
+      const ops: Prisma.PrismaPromise<unknown>[] = [];
+
       if (data.isDefault) {
-        await prisma.person.updateMany({
-          where: { userId, isDefault: true, id: { not: id } },
-          data: { isDefault: false },
-        });
+        ops.push(
+          prisma.person.updateMany({
+            where: { userId, isDefault: true, id: { not: id } },
+            data: { isDefault: false },
+          })
+        );
       }
 
-      const person = await prisma.person.findFirst({ where: { id, userId } });
-      if (!person) throw new Error('Person not found');
+      ops.push(
+        prisma.person.updateMany({
+          where: { id, userId },
+          data,
+        })
+      );
 
-      return await prisma.person.update({
-        where: { id },
-        data,
-      });
+      const results = await prisma.$transaction(ops);
+      const updateResult = results[results.length - 1] as { count: number };
+      if (updateResult.count === 0) throw new Error('Person not found');
+
+      return await prisma.person.findUniqueOrThrow({ where: { id } });
     } catch (error) {
       console.error('Error updating person:', error);
       throw new Error(handlePrismaError(error));
@@ -97,10 +112,8 @@ export class PersonRepository {
 
   async delete(id: string, userId: string): Promise<void> {
     try {
-      const person = await prisma.person.findFirst({ where: { id, userId } });
-      if (!person) throw new Error('Person not found');
-
-      await prisma.person.delete({ where: { id } });
+      const { count } = await prisma.person.deleteMany({ where: { id, userId } });
+      if (count === 0) throw new Error('Person not found');
     } catch (error) {
       console.error('Error deleting person:', error);
       throw new Error(handlePrismaError(error));
@@ -146,18 +159,20 @@ export class PersonRepository {
 
   async setDefault(id: string, userId: string): Promise<Person> {
     try {
-      const person = await prisma.person.findFirst({ where: { id, userId } });
-      if (!person) throw new Error('Person not found');
+      const [, setResult] = await prisma.$transaction([
+        prisma.person.updateMany({
+          where: { userId, isDefault: true },
+          data: { isDefault: false },
+        }),
+        prisma.person.updateMany({
+          where: { id, userId },
+          data: { isDefault: true },
+        }),
+      ]);
 
-      await prisma.person.updateMany({
-        where: { userId, isDefault: true },
-        data: { isDefault: false },
-      });
+      if (setResult.count === 0) throw new Error('Person not found');
 
-      return await prisma.person.update({
-        where: { id },
-        data: { isDefault: true },
-      });
+      return await prisma.person.findUniqueOrThrow({ where: { id } });
     } catch (error) {
       console.error('Error setting default person:', error);
       throw new Error(handlePrismaError(error));

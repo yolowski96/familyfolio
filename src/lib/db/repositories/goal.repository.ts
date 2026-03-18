@@ -86,9 +86,6 @@ export class GoalRepository {
 
   async update(id: string, userId: string, data: UpdateGoalInput): Promise<GoalWithPerson> {
     try {
-      const existing = await prisma.goal.findFirst({ where: { id, userId } });
-      if (!existing) throw new Error('Goal not found');
-
       const updateData: Prisma.GoalUncheckedUpdateInput = {};
       if (data.personId !== undefined) updateData.personId = data.personId;
       if (data.name !== undefined) updateData.name = data.name;
@@ -102,11 +99,16 @@ export class GoalRepository {
       if (data.assetType !== undefined) updateData.assetType = data.assetType;
       if (data.isCompleted !== undefined) updateData.isCompleted = data.isCompleted;
 
-      return await prisma.goal.update({
-        where: { id },
+      const { count } = await prisma.goal.updateMany({
+        where: { id, userId },
         data: updateData,
-        include: includeRelations,
       });
+      if (count === 0) throw new Error('Goal not found');
+
+      return await prisma.goal.findFirst({
+        where: { id },
+        include: includeRelations,
+      }) as GoalWithPerson;
     } catch (error) {
       console.error('Error updating goal:', error);
       throw new Error(handlePrismaError(error));
@@ -115,10 +117,8 @@ export class GoalRepository {
 
   async delete(id: string, userId: string): Promise<void> {
     try {
-      const existing = await prisma.goal.findFirst({ where: { id, userId } });
-      if (!existing) throw new Error('Goal not found');
-
-      await prisma.goal.delete({ where: { id } });
+      const { count } = await prisma.goal.deleteMany({ where: { id, userId } });
+      if (count === 0) throw new Error('Goal not found');
     } catch (error) {
       console.error('Error deleting goal:', error);
       throw new Error(handlePrismaError(error));
@@ -143,11 +143,25 @@ export class GoalRepository {
   }
 
   async updateProgress(id: string, userId: string, currentValue: number): Promise<GoalWithPerson> {
-    const goal = await this.findById(id, userId);
-    if (!goal) throw new Error('Goal not found');
+    try {
+      const result = await prisma.$queryRaw<{ target_value: number }[]>`
+        UPDATE goals SET
+          current_value = ${currentValue},
+          is_completed = ${currentValue} >= target_value,
+          updated_at = NOW()
+        WHERE id = ${id} AND user_id = ${userId}
+        RETURNING target_value::float
+      `;
+      if (result.length === 0) throw new Error('Goal not found');
 
-    const isCompleted = currentValue >= Number(goal.targetValue);
-    return this.update(id, userId, { currentValue, isCompleted });
+      return await prisma.goal.findFirst({
+        where: { id },
+        include: includeRelations,
+      }) as GoalWithPerson;
+    } catch (error) {
+      console.error('Error updating goal progress:', error);
+      throw new Error(handlePrismaError(error));
+    }
   }
 }
 
