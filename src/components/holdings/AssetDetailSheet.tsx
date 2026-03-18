@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatCurrency, formatQuantity } from "@/lib/utils"
+import { usePrivacy } from "@/components/providers/PrivacyProvider"
 import { useFilteredTransactions, usePortfolioStore, DbTransaction } from "@/store/usePortfolioStore"
 import { AssetHolding, AssetType } from "@/types"
 import { AddTransactionDialog } from "@/components/transactions/AddTransactionDialog"
@@ -76,6 +77,7 @@ interface AssetDetailSheetProps {
 }
 
 export function AssetDetailSheet({ asset, open, onOpenChange }: AssetDetailSheetProps) {
+  usePrivacy();
   const transactions = useFilteredTransactions()
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)

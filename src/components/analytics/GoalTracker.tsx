@@ -48,6 +48,7 @@ import {
 import { formatCurrencyCompact, formatQuantity } from "@/lib/utils"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
 import { usePortfolioWithPrices } from "@/hooks/usePortfolioWithPrices"
+import { usePrivacy } from "@/components/providers/PrivacyProvider"
 import { Goal, GoalType, AssetType } from "@/types"
 
 const GOAL_TYPE_LABELS: Record<GoalType, string> = {
@@ -173,6 +174,7 @@ function GoalCard({ goal, currentValue, onDelete, onComplete }: GoalCardProps) {
 }
 
 export function GoalTracker() {
+  usePrivacy();
   const goals = usePortfolioStore((state) => state.goals)
   const persons = usePortfolioStore((state) => state.persons)
   const addGoalAction = usePortfolioStore((state) => state.addGoal)

@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { IconChevronDown, IconUsers, IconWallet } from "@tabler/icons-react"
+import { PrivacyToggle } from "@/components/layout/PrivacyToggle"
 import { ThemeToggle } from "@/components/layout/ThemeToggle"
 
 export function SiteHeader() {
@@ -85,6 +86,7 @@ export function SiteHeader() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <PrivacyToggle />
           <ThemeToggle />
         </div>
       </div>

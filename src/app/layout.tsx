@@ -6,6 +6,7 @@ import { AuthProvider } from "@/components/providers/AuthProvider";
 import { StoreInitializer } from "@/components/providers/StoreInitializer";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ErrorBoundary } from "@/components/providers/ErrorBoundary";
+import { PrivacyProvider } from "@/components/providers/PrivacyProvider";
 import { Toaster } from "@/components/ui/sonner";
 
 const spaceGrotesk = Space_Grotesk({
@@ -39,10 +40,12 @@ export default function RootLayout({
           <ThemeProvider defaultTheme="dark">
             <AuthProvider>
               <QueryProvider>
+                <PrivacyProvider>
                 <StoreInitializer>
                   {children}
                   <Toaster />
                 </StoreInitializer>
+              </PrivacyProvider>
               </QueryProvider>
             </AuthProvider>
           </ThemeProvider>

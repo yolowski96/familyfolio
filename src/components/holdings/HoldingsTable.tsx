@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { usePrivacy } from '@/components/providers/PrivacyProvider';
 import { formatCurrency, formatQuantity } from '@/lib/utils';
 import { AssetHolding } from '@/types';
 import { TYPE_COLORS, TYPE_ICONS, formatPercent } from './HoldingCard';
@@ -33,6 +34,7 @@ interface HoldingsTableProps {
 }
 
 export function HoldingsTable({ holdings, onAssetClick }: HoldingsTableProps) {
+  usePrivacy();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
 

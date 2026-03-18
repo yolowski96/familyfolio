@@ -28,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatCurrencyCompact } from "@/lib/utils"
 import { usePortfolioStore, useFilteredTransactions } from "@/store/usePortfolioStore"
 import { usePortfolioWithPrices } from "@/hooks/usePortfolioWithPrices"
+import { usePrivacy } from "@/components/providers/PrivacyProvider"
 import { AssetType } from "@/types"
 import { GoalTracker } from "@/components/analytics/GoalTracker"
 
@@ -48,6 +49,7 @@ const TYPE_BG_COLORS: Record<AssetType, string> = {
 }
 
 export function AnalyticsView() {
+  usePrivacy();
   const { summary } = usePortfolioWithPrices()
   const transactions = useFilteredTransactions()
   const persons = usePortfolioStore((state) => state.persons)

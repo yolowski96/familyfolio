@@ -7,6 +7,7 @@ import {
   IconCurrencyEuro,
   IconTrendingUp,
 } from '@tabler/icons-react';
+import { usePrivacy } from '@/components/providers/PrivacyProvider';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency, formatQuantity } from '@/lib/utils';
@@ -34,6 +35,7 @@ interface HoldingCardProps {
 }
 
 export function HoldingCard({ holding, onClick }: HoldingCardProps) {
+  usePrivacy();
   const isPositive = holding.unrealizedPL >= 0;
   const is24hPositive = holding.change24hPercent >= 0;
 

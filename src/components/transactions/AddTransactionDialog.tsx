@@ -24,6 +24,7 @@ import {
 import { AssetType } from '@/types';
 import { cn, formatCurrency } from '@/lib/utils';
 import { useTransactionForm, InitialAssetData } from './hooks/useTransactionForm';
+import { usePrivacy } from '@/components/providers/PrivacyProvider';
 import { AssetSearchInput } from './AssetSearchInput';
 
 interface AddTransactionDialogProps {
@@ -32,6 +33,7 @@ interface AddTransactionDialogProps {
 }
 
 export function AddTransactionDialog({ children, initialAsset }: AddTransactionDialogProps) {
+  usePrivacy();
   const [open, setOpen] = useState(false);
   
   const {

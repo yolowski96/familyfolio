@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { usePrivacy } from "@/components/providers/PrivacyProvider"
 import { formatCurrency, formatQuantity } from "@/lib/utils"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
 import { usePortfolioWithPrices } from "@/hooks/usePortfolioWithPrices"
@@ -32,6 +33,7 @@ const TYPE_COLORS: Record<AssetType, string> = {
 }
 
 export function DataTable() {
+  usePrivacy();
   const { summary } = usePortfolioWithPrices()
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)

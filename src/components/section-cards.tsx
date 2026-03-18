@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { usePrivacy } from "@/components/providers/PrivacyProvider"
 import { formatCurrency } from "@/lib/utils"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
 import { usePortfolioWithPrices } from "@/hooks/usePortfolioWithPrices"
@@ -39,6 +40,7 @@ function LoadingSkeleton() {
 }
 
 export function SectionCards() {
+  usePrivacy();
   const { summary, isLoading: pricesLoading } = usePortfolioWithPrices()
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)

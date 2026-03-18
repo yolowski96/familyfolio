@@ -81,13 +81,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Holdings recalculated successfully' });
     }
 
-    if (action === 'recalculate-all') {
-      await holdingRepository.recalculateAll(user.id);
-      return NextResponse.json({ success: true, message: 'All holdings recalculated successfully' });
-    }
-
     return NextResponse.json(
-      { error: 'Invalid action. Supported actions: update-prices, recalculate, recalculate-all' },
+      { error: 'Invalid action. Supported actions: update-prices, recalculate' },
       { status: 400 }
     );
   } catch (error) {

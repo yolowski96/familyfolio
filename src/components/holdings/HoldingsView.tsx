@@ -4,6 +4,7 @@ import * as React from 'react';
 import { IconPlus } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/utils';
+import { usePrivacy } from '@/components/providers/PrivacyProvider';
 import { usePortfolioStore } from '@/store/usePortfolioStore';
 import { usePortfolioWithPrices } from '@/hooks/usePortfolioWithPrices';
 import { AssetHolding } from '@/types';
@@ -19,6 +20,7 @@ import { HoldingsToolbar } from './HoldingsToolbar';
 import { useHoldingsFilter } from './hooks/useHoldingsFilter';
 
 export function HoldingsView() {
+  usePrivacy();
   const { summary } = usePortfolioWithPrices();
   const persons = usePortfolioStore((state) => state.persons);
   const activePersonId = usePortfolioStore((state) => state.activePersonId);

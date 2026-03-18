@@ -45,6 +45,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { usePrivacy } from '@/components/providers/PrivacyProvider';
 import { formatCurrency, formatQuantity } from '@/lib/utils';
 import { DbTransaction, DbPerson } from '@/store/usePortfolioStore';
 import { AssetType } from '@/types';
@@ -82,6 +83,7 @@ export function TransactionsTable({
   pagination,
   onPaginationChange,
 }: TransactionsTableProps) {
+  usePrivacy();
   const [sorting, setSorting] = React.useState<SortingState>([{ id: 'date', desc: true }]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
 
