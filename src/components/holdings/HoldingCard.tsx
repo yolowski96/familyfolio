@@ -43,17 +43,17 @@ export function HoldingCard({ holding, onClick }: HoldingCardProps) {
       onClick={onClick}
     >
       <CardHeader className="pb-2">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`flex size-10 items-center justify-center rounded-lg ${TYPE_COLORS[holding.type]}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${TYPE_COLORS[holding.type]}`}>
               {TYPE_ICONS[holding.type]}
             </div>
-            <div>
+            <div className="min-w-0">
               <CardTitle className="text-base">{holding.symbol}</CardTitle>
-              <p className="text-muted-foreground text-sm">{holding.name}</p>
+              <p className="text-muted-foreground text-sm line-clamp-2 min-h-[2.5rem]">{holding.name}</p>
             </div>
           </div>
-          <Badge variant="outline" className={TYPE_COLORS[holding.type]}>
+          <Badge variant="outline" className={`shrink-0 ${TYPE_COLORS[holding.type]}`}>
             {holding.type}
           </Badge>
         </div>

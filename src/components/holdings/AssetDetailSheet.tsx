@@ -80,16 +80,17 @@ export function AssetDetailSheet({ asset, open, onOpenChange }: AssetDetailSheet
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)
   const updateTransactionAction = usePortfolioStore((state) => state.updateTransaction)
-  const loadTransactions = usePortfolioStore((state) => state.loadTransactions)
-  const loadPersons = usePortfolioStore((state) => state.loadPersons)
+  const storeTransactions = usePortfolioStore((state) => state.transactions)
+  const loadBatch = usePortfolioStore((state) => state.loadBatch)
   const [currentPage, setCurrentPage] = React.useState(0)
 
   React.useEffect(() => {
-    if (open) {
-      if (transactions.length === 0) loadTransactions()
-      if (persons.length === 0) loadPersons()
-    }
-  }, [open, transactions.length, persons.length, loadTransactions, loadPersons])
+    if (!open) return
+    const needed: ('transactions' | 'persons')[] = []
+    if (storeTransactions.length === 0) needed.push('transactions')
+    if (persons.length === 0) needed.push('persons')
+    if (needed.length > 0) loadBatch(needed)
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   
   // Edit transaction state
   const [editDialogOpen, setEditDialogOpen] = React.useState(false)

@@ -21,8 +21,8 @@ export function TransactionsView() {
   const deleteTransaction = usePortfolioStore((state) => state.deleteTransaction);
   const isInitialized = usePortfolioStore((state) => state.isInitialized);
   const storeLoading = usePortfolioStore((state) => state.isLoading);
-  const loadPersons = usePortfolioStore((state) => state.loadPersons);
-  const loadTransactions = usePortfolioStore((state) => state.loadTransactions);
+  const storeTransactions = usePortfolioStore((state) => state.transactions);
+  const loadBatch = usePortfolioStore((state) => state.loadBatch);
 
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
@@ -31,15 +31,12 @@ export function TransactionsView() {
 
   const filter = useTransactionsFilter(transactions, { activePersonId });
 
-  // Lazy-load transactions and persons when this page mounts
   React.useEffect(() => {
-    if (transactions.length === 0) {
-      loadTransactions().catch(console.error);
-    }
-    if (persons.length === 0) {
-      loadPersons().catch(console.error);
-    }
-  }, [transactions.length, persons.length, loadTransactions, loadPersons]);
+    const needed: ('transactions' | 'persons')[] = [];
+    if (storeTransactions.length === 0) needed.push('transactions');
+    if (persons.length === 0) needed.push('persons');
+    if (needed.length > 0) loadBatch(needed).catch(console.error);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const viewName = activePersonId === 'ALL'
     ? 'All Portfolios'

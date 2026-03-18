@@ -126,6 +126,7 @@ interface PortfolioState {
   
   // Utility Actions
   loadAll: () => Promise<void>;
+  loadBatch: (parts: ('transactions' | 'persons' | 'holdings')[]) => Promise<void>;
   clearError: () => void;
   resetStore: () => void;
 }
@@ -520,15 +521,11 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
   // =========================================================================
   
   loadAll: async () => {
-    // Prevent multiple simultaneous loads
     if (get().isLoading) return;
     
     set({ isLoading: true, error: null });
     try {
-      // Load holdings initially - needed for the dashboard summary.
-      // Holdings are a small dataset (one row per asset) vs transactions (many rows).
-      // Transactions are loaded on-demand when the user visits the transactions page.
-      await get().loadHoldings();
+      await get().loadBatch(['holdings', 'persons']);
       set({ isLoading: false, isInitialized: true });
     } catch (error) {
       console.error('Error loading all data:', error);
@@ -537,6 +534,25 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
         isLoading: false,
         isInitialized: true,
       });
+    }
+  },
+
+  loadBatch: async (parts) => {
+    try {
+      const response = await fetch(`/api/portfolio?include=${parts.join(',')}`);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to load portfolio data');
+      }
+      const data = await response.json();
+      const updates: Partial<PortfolioState> = {};
+      if (data.transactions) updates.transactions = data.transactions;
+      if (data.persons) updates.persons = data.persons;
+      if (data.holdings) updates.holdings = data.holdings;
+      set(updates);
+    } catch (error) {
+      console.error('Error loading batch:', error);
+      throw error;
     }
   },
   

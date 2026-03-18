@@ -74,6 +74,34 @@ export class TransactionRepository {
     }
   }
 
+  async findAllLean(userId: string) {
+    try {
+      return await prisma.transaction.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          personId: true,
+          assetSymbol: true,
+          assetName: true,
+          assetType: true,
+          type: true,
+          quantity: true,
+          pricePerUnit: true,
+          totalAmount: true,
+          currency: true,
+          fee: true,
+          date: true,
+          exchange: true,
+          notes: true,
+        },
+        orderBy: { date: 'desc' },
+      });
+    } catch (error) {
+      console.error('Error fetching transactions (lean):', error);
+      throw new Error(handlePrismaError(error));
+    }
+  }
+
   async findById(id: string, userId: string): Promise<TransactionWithRelations | null> {
     try {
       return await prisma.transaction.findFirst({
