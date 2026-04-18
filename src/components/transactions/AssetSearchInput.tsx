@@ -6,23 +6,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useDebounce } from '@/hooks/useDebounce';
 import { AssetType } from '@/types';
+import type { AssetSearchResult } from '@/types/transactionSearch';
 import { cn } from '@/lib/utils';
 
-export interface SearchResult {
-  symbol: string;
-  name: string;
-  type: string;
-  assetType?: AssetType;
-  exchange?: string;
-  id?: string;
-  quantity?: number;
-}
+/** @deprecated Use `AssetSearchResult` from `@/types/transactionSearch`. */
+export type SearchResult = AssetSearchResult;
 
 interface AssetSearchInputProps {
   transactionType: 'BUY' | 'SELL';
   assetType: AssetType;
   existingHoldings: Array<{ symbol: string; name: string; type: AssetType; quantity: number }>;
-  onSelectAsset: (result: SearchResult) => void;
+  onSelectAsset: (result: AssetSearchResult) => void;
   disabled?: boolean;
 }
 
@@ -34,7 +28,7 @@ export function AssetSearchInput({
   disabled,
 }: AssetSearchInputProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchResults, setSearchResults] = useState<AssetSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);

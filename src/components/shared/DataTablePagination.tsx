@@ -7,8 +7,9 @@ import {
   IconChevronsRight,
 } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-interface TransactionsPaginationProps {
+interface DataTablePaginationProps {
   pageIndex: number;
   pageSize: number;
   totalItems: number;
@@ -19,9 +20,21 @@ interface TransactionsPaginationProps {
   onPreviousPage: () => void;
   onNextPage: () => void;
   onLastPage: () => void;
+  /** Noun shown in the summary ("holdings", "transactions"). */
+  itemLabel?: string;
+  /** When `true`, hides itself if `totalItems <= pageSize`. */
+  hideWhenSinglePage?: boolean;
+  /** When `true`, draws a top border (used under tables). */
+  bordered?: boolean;
+  className?: string;
 }
 
-export function TransactionsPagination({
+/**
+ * Unified pagination footer used by the holdings grid and the transactions
+ * table. Replaces the previous `HoldingsPagination` and `TransactionsPagination`
+ * duplicates.
+ */
+export function DataTablePagination({
   pageIndex,
   pageSize,
   totalItems,
@@ -32,17 +45,35 @@ export function TransactionsPagination({
   onPreviousPage,
   onNextPage,
   onLastPage,
-}: TransactionsPaginationProps) {
-  if (totalItems <= pageSize) {
+  itemLabel = 'items',
+  hideWhenSinglePage = false,
+  bordered = false,
+  className,
+}: DataTablePaginationProps) {
+  if (hideWhenSinglePage && totalItems <= pageSize) {
     return null;
   }
 
+  const displayPageCount = pageCount || 1;
+
   return (
-    <div className="flex items-center justify-between">
+    <div
+      className={cn(
+        'flex items-center justify-between',
+        bordered && 'pt-4 border-t',
+        className
+      )}
+    >
       <p className="text-muted-foreground text-sm">
-        Showing {pageIndex * pageSize + 1} to{' '}
-        {Math.min((pageIndex + 1) * pageSize, totalItems)} of{' '}
-        {totalItems} transactions
+        {totalItems > 0 ? (
+          <>
+            Showing {pageIndex * pageSize + 1} to{' '}
+            {Math.min((pageIndex + 1) * pageSize, totalItems)} of {totalItems}{' '}
+            {itemLabel}
+          </>
+        ) : (
+          `No ${itemLabel}`
+        )}
       </p>
       <div className="flex items-center gap-2">
         <Button
@@ -50,6 +81,7 @@ export function TransactionsPagination({
           size="icon"
           onClick={onFirstPage}
           disabled={!canPreviousPage}
+          aria-label="First page"
         >
           <IconChevronsLeft className="size-4" />
         </Button>
@@ -58,17 +90,19 @@ export function TransactionsPagination({
           size="icon"
           onClick={onPreviousPage}
           disabled={!canPreviousPage}
+          aria-label="Previous page"
         >
           <IconChevronLeft className="size-4" />
         </Button>
         <span className="text-sm px-2">
-          Page {pageIndex + 1} of {pageCount}
+          {pageIndex + 1} / {displayPageCount}
         </span>
         <Button
           variant="outline"
           size="icon"
           onClick={onNextPage}
           disabled={!canNextPage}
+          aria-label="Next page"
         >
           <IconChevronRight className="size-4" />
         </Button>
@@ -77,6 +111,7 @@ export function TransactionsPagination({
           size="icon"
           onClick={onLastPage}
           disabled={!canNextPage}
+          aria-label="Last page"
         >
           <IconChevronsRight className="size-4" />
         </Button>

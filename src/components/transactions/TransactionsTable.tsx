@@ -5,11 +5,8 @@ import {
   IconArrowDown,
   IconArrowUp,
   IconCalendar,
-  IconCurrencyBitcoin,
-  IconCurrencyEuro,
   IconSortAscending,
   IconTrash,
-  IconTrendingUp,
 } from '@tabler/icons-react';
 import {
   flexRender,
@@ -47,24 +44,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { usePrivacy } from '@/components/providers/PrivacyProvider';
 import { formatCurrency, formatQuantity } from '@/lib/utils';
-import { DbTransaction, DbPerson } from '@/store/usePortfolioStore';
-import { AssetType } from '@/types';
-
-const TYPE_COLORS: Record<AssetType, string> = {
-  CRYPTO: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
-  STOCK: 'bg-violet-500/10 text-violet-500 border-violet-500/20',
-  ETF: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-};
-
-const TYPE_ICONS: Record<AssetType, React.ReactNode> = {
-  CRYPTO: <IconCurrencyBitcoin className="size-4" />,
-  STOCK: <IconCurrencyEuro className="size-4" />,
-  ETF: <IconTrendingUp className="size-4" />,
-};
+import { AssetTypeIcon, TYPE_COLORS } from '@/lib/assetTypeDisplay';
+import { usePersonName } from '@/hooks/usePersonName';
+import { DbTransaction } from '@/store/usePortfolioStore';
 
 interface TransactionsTableProps {
   transactions: DbTransaction[];
-  persons: DbPerson[];
   showPersonColumn: boolean;
   onDeleteTransaction: (id: string) => void;
   hasActiveFilters: boolean;
@@ -75,7 +60,6 @@ interface TransactionsTableProps {
 
 export function TransactionsTable({
   transactions,
-  persons,
   showPersonColumn,
   onDeleteTransaction,
   hasActiveFilters,
@@ -86,10 +70,7 @@ export function TransactionsTable({
   usePrivacy();
   const [sorting, setSorting] = React.useState<SortingState>([{ id: 'date', desc: true }]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-
-  const getPersonName = React.useCallback((personId: string) => {
-    return persons.find(p => p.id === personId)?.name || 'Unknown';
-  }, [persons]);
+  const getPersonName = usePersonName();
 
   const columns: ColumnDef<DbTransaction>[] = React.useMemo(() => {
     const baseColumns: ColumnDef<DbTransaction>[] = [
@@ -137,7 +118,7 @@ export function TransactionsTable({
           return (
             <div className="flex items-center gap-3">
               <div className={`flex size-8 items-center justify-center rounded-lg ${TYPE_COLORS[tx.assetType]}`}>
-                {TYPE_ICONS[tx.assetType]}
+                <AssetTypeIcon type={tx.assetType} size="sm" />
               </div>
               <div>
                 <div className="font-medium">{tx.assetSymbol}</div>

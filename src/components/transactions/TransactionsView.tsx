@@ -6,8 +6,9 @@ import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useFilteredTransactions, usePortfolioStore } from '@/store/usePortfolioStore';
+import { usePersonName } from '@/hooks/usePersonName';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { AddTransactionDialog } from './AddTransactionDialog';
-import { TransactionsPagination } from './TransactionsPagination';
 import { TransactionsSkeleton } from './TransactionsSkeleton';
 import { TransactionsSummaryStats } from './TransactionsSummaryStats';
 import { TransactionsTable } from './TransactionsTable';
@@ -47,9 +48,7 @@ export function TransactionsView() {
     ? 'All Portfolios'
     : persons.find(p => p.id === activePersonId)?.name || 'Portfolio';
 
-  const getPersonName = React.useCallback((personId: string) => {
-    return persons.find(p => p.id === personId)?.name || 'Unknown';
-  }, [persons]);
+  const getPersonName = usePersonName();
 
   const handleExportCSV = React.useCallback(() => {
     if (filter.filteredTransactions.length === 0) {
@@ -150,10 +149,8 @@ export function TransactionsView() {
         onClearFilters={filter.clearFilters}
       />
 
-      {/* Transactions Table */}
       <TransactionsTable
         transactions={filter.filteredTransactions}
-        persons={persons}
         showPersonColumn={activePersonId === 'ALL'}
         onDeleteTransaction={deleteTransaction}
         hasActiveFilters={filter.hasActiveFilters}
@@ -162,8 +159,7 @@ export function TransactionsView() {
         onPaginationChange={setPagination}
       />
 
-      {/* Pagination */}
-      <TransactionsPagination
+      <DataTablePagination
         pageIndex={pagination.pageIndex}
         pageSize={pagination.pageSize}
         totalItems={filter.filteredTransactions.length}
@@ -174,6 +170,8 @@ export function TransactionsView() {
         onPreviousPage={() => setPagination(p => ({ ...p, pageIndex: p.pageIndex - 1 }))}
         onNextPage={() => setPagination(p => ({ ...p, pageIndex: p.pageIndex + 1 }))}
         onLastPage={() => setPagination(p => ({ ...p, pageIndex: pageCount - 1 }))}
+        itemLabel="transactions"
+        hideWhenSinglePage
       />
     </div>
   );

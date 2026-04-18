@@ -25,8 +25,9 @@ import {
 } from '@/components/ui/table';
 import { usePrivacy } from '@/components/providers/PrivacyProvider';
 import { formatCurrency, formatQuantity } from '@/lib/utils';
+import { formatPercent } from '@/lib/format';
+import { AssetTypeIcon, TYPE_COLORS } from '@/lib/assetTypeDisplay';
 import { AssetHolding } from '@/types';
-import { TYPE_COLORS, TYPE_ICONS, formatPercent } from './HoldingCard';
 
 interface HoldingsTableProps {
   holdings: AssetHolding[];
@@ -51,7 +52,7 @@ export function HoldingsTable({ holdings, onAssetClick }: HoldingsTableProps) {
               onClick={() => onAssetClick(holding)}
             >
               <div className={`flex size-8 items-center justify-center rounded-lg ${TYPE_COLORS[holding.type]}`}>
-                {TYPE_ICONS[holding.type]}
+                <AssetTypeIcon type={holding.type} size="sm" />
               </div>
               <div>
                 <div className="font-medium">{holding.symbol}</div>

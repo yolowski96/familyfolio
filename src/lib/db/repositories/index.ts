@@ -20,10 +20,3 @@ export type {
   HoldingWithRelations,
   HoldingWithAsset,
 } from './holding.repository';
-
-export { goalRepository, GoalRepository } from './goal.repository';
-export type {
-  CreateGoalInput,
-  UpdateGoalInput,
-  GoalWithPerson,
-} from './goal.repository';

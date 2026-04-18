@@ -6,8 +6,8 @@ import {
   IconCalendar,
 } from '@tabler/icons-react';
 import { usePrivacy } from '@/components/providers/PrivacyProvider';
-import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
+import { SummaryStatCard } from '@/components/shared/SummaryStatCard';
 import { TransactionStats, DateRange } from './hooks/useTransactionsFilter';
 
 interface TransactionsSummaryStatsProps {
@@ -30,58 +30,51 @@ export function TransactionsSummaryStats({
   dateRange,
 }: TransactionsSummaryStatsProps) {
   usePrivacy();
+  const netInflow = stats.netFlow >= 0;
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Card>
-        <CardContent className="flex items-center gap-4 pt-0">
-          <div className="flex size-12 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+      <SummaryStatCard
+        label="Total Bought"
+        value={formatCurrency(stats.totalBuys)}
+        caption={`${stats.buyCount} transactions`}
+        icon={<IconArrowDown className="size-6" />}
+        iconClassName="bg-emerald-500/10 text-emerald-500"
+        valueClassName="text-emerald-500"
+      />
+      <SummaryStatCard
+        label="Total Sold"
+        value={formatCurrency(stats.totalSells)}
+        caption={`${stats.sellCount} transactions`}
+        icon={<IconArrowUp className="size-6" />}
+        iconClassName="bg-rose-500/10 text-rose-500"
+        valueClassName="text-rose-500"
+      />
+      <SummaryStatCard
+        label="Net Investment"
+        value={formatCurrency(Math.abs(stats.netFlow))}
+        caption={netInflow ? 'Net inflow' : 'Net outflow'}
+        icon={
+          netInflow ? (
             <IconArrowDown className="size-6" />
-          </div>
-          <div>
-            <p className="text-muted-foreground text-sm">Total Bought</p>
-            <p className="text-xl font-semibold text-emerald-500">{formatCurrency(stats.totalBuys)}</p>
-            <p className="text-muted-foreground text-xs">{stats.buyCount} transactions</p>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="flex items-center gap-4 pt-0">
-          <div className="flex size-12 items-center justify-center rounded-lg bg-rose-500/10 text-rose-500">
+          ) : (
             <IconArrowUp className="size-6" />
-          </div>
-          <div>
-            <p className="text-muted-foreground text-sm">Total Sold</p>
-            <p className="text-xl font-semibold text-rose-500">{formatCurrency(stats.totalSells)}</p>
-            <p className="text-muted-foreground text-xs">{stats.sellCount} transactions</p>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="flex items-center gap-4 pt-0">
-          <div className={`flex size-12 items-center justify-center rounded-lg ${stats.netFlow >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-            {stats.netFlow >= 0 ? <IconArrowDown className="size-6" /> : <IconArrowUp className="size-6" />}
-          </div>
-          <div>
-            <p className="text-muted-foreground text-sm">Net Investment</p>
-            <p className={`text-xl font-semibold ${stats.netFlow >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-              {formatCurrency(Math.abs(stats.netFlow))}
-            </p>
-            <p className="text-muted-foreground text-xs">{stats.netFlow >= 0 ? 'Net inflow' : 'Net outflow'}</p>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="flex items-center gap-4 pt-0">
-          <div className="flex size-12 items-center justify-center rounded-lg bg-violet-500/10 text-violet-500">
-            <IconCalendar className="size-6" />
-          </div>
-          <div>
-            <p className="text-muted-foreground text-sm">Total Transactions</p>
-            <p className="text-xl font-semibold">{totalCount}</p>
-            <p className="text-muted-foreground text-xs">{DATE_RANGE_LABELS[dateRange]}</p>
-          </div>
-        </CardContent>
-      </Card>
+          )
+        }
+        iconClassName={
+          netInflow
+            ? 'bg-emerald-500/10 text-emerald-500'
+            : 'bg-rose-500/10 text-rose-500'
+        }
+        valueClassName={netInflow ? 'text-emerald-500' : 'text-rose-500'}
+      />
+      <SummaryStatCard
+        label="Total Transactions"
+        value={totalCount}
+        caption={DATE_RANGE_LABELS[dateRange]}
+        icon={<IconCalendar className="size-6" />}
+        iconClassName="bg-violet-500/10 text-violet-500"
+      />
     </div>
   );
 }

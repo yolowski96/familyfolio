@@ -25,7 +25,6 @@ model Person {
 
   transactions Transaction[]
   holdings     Holding[]
-  goals        Goal[]
 
   @@index([userId], name: "idx_person_user")
   @@map("persons")
@@ -116,32 +115,6 @@ model Holding {
 }
 
 // ============================================
-// GOAL
-// ============================================
-model Goal {
-  id           String    @id @default(uuid())
-  userId       String    @map("user_id")
-  personId     String?   @map("person_id")
-  name         String    @db.VarChar(255)
-  type         GoalType
-  targetValue  Decimal   @map("target_value") @db.Decimal(20, 2)
-  currentValue Decimal   @default(0) @map("current_value") @db.Decimal(20, 2)
-  deadline     DateTime?
-  assetSymbol  String?   @map("asset_symbol") @db.VarChar(20)
-  assetType    AssetType? @map("asset_type")
-  isCompleted  Boolean   @default(false) @map("is_completed")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-
-  person Person? @relation(fields: [personId], references: [id], onDelete: Cascade)
-
-  @@index([userId], name: "idx_goal_user")
-  @@index([personId], name: "idx_goal_person")
-  @@index([userId, isCompleted, deadline], name: "idx_goal_user_incomplete")
-  @@map("goals")
-}
-
-// ============================================
 // ENUMS
 // ============================================
 enum AssetType {
@@ -153,11 +126,4 @@ enum AssetType {
 enum TransactionType {
   BUY
   SELL
-}
-
-enum GoalType {
-  PORTFOLIO_VALUE
-  MONTHLY_INVESTMENT
-  ASSET_TARGET
-  DIVERSIFICATION
 }

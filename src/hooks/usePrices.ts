@@ -1,18 +1,13 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { PriceData, AssetType } from '@/types';
+import type { AssetSearchResult } from '@/types/transactionSearch';
 
 interface Asset {
   symbol: string;
   assetType: AssetType;
-  exchange?: string;
-}
-
-interface SearchResult {
-  symbol: string;
-  name: string;
-  type: string;
   exchange?: string;
 }
 
@@ -50,8 +45,19 @@ export async function fetchBatchPrices(
  * Auto-refreshes every 5 minutes
  */
 export function usePrices(assets: Asset[], enabled: boolean = true) {
+  // Build a stable cache key from the asset descriptors so the query doesn't
+  // refetch just because `assets` is a new array reference each render.
+  const assetKey = useMemo(
+    () =>
+      assets
+        .map((a) => `${a.symbol}:${a.assetType}:${a.exchange ?? ''}`)
+        .sort()
+        .join(','),
+    [assets]
+  );
+
   return useQuery<Map<string, PriceData>, Error>({
-    queryKey: ['prices', assets],
+    queryKey: ['prices', assetKey],
     queryFn: async () => {
       const data = await fetchBatchPrices(assets);
       return new Map<string, PriceData>(Object.entries(data));
@@ -100,7 +106,7 @@ export function usePrice(
  * Search for stocks/ETFs by name or ticker
  */
 export function useAssetSearch(query: string, assetType?: AssetType) {
-  return useQuery<SearchResult[], Error>({
+  return useQuery<AssetSearchResult[], Error>({
     queryKey: ['asset-search', query, assetType],
     queryFn: async () => {
       const response = await fetch('/api/prices/search', {

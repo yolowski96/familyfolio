@@ -130,6 +130,7 @@ export class CoinGeckoProvider {
 
       const response = await fetch(url, {
         headers: this.getHeaders(),
+        next: { revalidate: 300 },
       });
 
       if (!response.ok) {
@@ -193,6 +194,7 @@ export class CoinGeckoProvider {
 
       const response = await fetch(url, {
         headers: this.getHeaders(),
+        next: { revalidate: 300 },
       });
 
       if (!response.ok) {
@@ -238,6 +240,7 @@ export class CoinGeckoProvider {
 
       const response = await fetch(url, {
         headers: this.getHeaders(),
+        next: { revalidate: 3600 },
       });
 
       if (!response.ok) {
@@ -269,6 +272,7 @@ export class CoinGeckoProvider {
 
       const response = await fetch(url, {
         headers: this.getHeaders(),
+        next: { revalidate: 3600 },
       });
 
       if (!response.ok) {

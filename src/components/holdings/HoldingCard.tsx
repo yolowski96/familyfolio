@@ -1,33 +1,13 @@
 'use client';
 
-import {
-  IconArrowDown,
-  IconArrowUp,
-  IconCurrencyBitcoin,
-  IconCurrencyEuro,
-  IconTrendingUp,
-} from '@tabler/icons-react';
+import { IconArrowDown, IconArrowUp } from '@tabler/icons-react';
 import { usePrivacy } from '@/components/providers/PrivacyProvider';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency, formatQuantity } from '@/lib/utils';
-import { AssetHolding, AssetType } from '@/types';
-
-export const TYPE_COLORS: Record<AssetType, string> = {
-  CRYPTO: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
-  STOCK: 'bg-violet-500/10 text-violet-500 border-violet-500/20',
-  ETF: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-};
-
-export const TYPE_ICONS: Record<AssetType, React.ReactNode> = {
-  CRYPTO: <IconCurrencyBitcoin className="size-5" />,
-  STOCK: <IconCurrencyEuro className="size-5" />,
-  ETF: <IconTrendingUp className="size-5" />,
-};
-
-export function formatPercent(value: number): string {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-}
+import { formatPercent } from '@/lib/format';
+import { AssetTypeIcon, TYPE_COLORS } from '@/lib/assetTypeDisplay';
+import { AssetHolding } from '@/types';
 
 interface HoldingCardProps {
   holding: AssetHolding;
@@ -48,7 +28,7 @@ export function HoldingCard({ holding, onClick }: HoldingCardProps) {
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
             <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${TYPE_COLORS[holding.type]}`}>
-              {TYPE_ICONS[holding.type]}
+              <AssetTypeIcon type={holding.type} />
             </div>
             <div className="min-w-0">
               <CardTitle className="text-base">{holding.symbol}</CardTitle>

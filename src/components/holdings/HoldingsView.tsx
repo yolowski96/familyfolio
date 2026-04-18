@@ -10,9 +10,9 @@ import { usePortfolioWithPrices } from '@/hooks/usePortfolioWithPrices';
 import { AssetHolding } from '@/types';
 import { AddTransactionDialog } from '@/components/transactions/AddTransactionDialog';
 import { AssetDetailSheet } from '@/components/holdings/AssetDetailSheet';
+import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { HoldingCard } from './HoldingCard';
 import { HoldingsEmptyState } from './HoldingsEmptyState';
-import { HoldingsPagination } from './HoldingsPagination';
 import { HoldingsSkeleton } from './HoldingsSkeleton';
 import { HoldingsSummaryStats } from './HoldingsSummaryStats';
 import { HoldingsTable } from './HoldingsTable';
@@ -114,18 +114,19 @@ export function HoldingsView() {
           />
         )}
 
-        {/* Pagination */}
-        <HoldingsPagination
+        <DataTablePagination
           pageIndex={filter.pageIndex}
           pageSize={filter.pageSize}
           totalItems={filter.filteredHoldings.length}
-          totalPages={filter.totalPages}
+          pageCount={filter.totalPages}
+          canPreviousPage={filter.canGoPrevious}
+          canNextPage={filter.canGoNext}
           onFirstPage={filter.goToFirstPage}
-          onLastPage={filter.goToLastPage}
-          onNextPage={filter.goToNextPage}
           onPreviousPage={filter.goToPreviousPage}
-          canGoNext={filter.canGoNext}
-          canGoPrevious={filter.canGoPrevious}
+          onNextPage={filter.goToNextPage}
+          onLastPage={filter.goToLastPage}
+          itemLabel="holdings"
+          bordered
         />
       </div>
 

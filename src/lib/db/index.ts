@@ -6,7 +6,6 @@ export {
   personRepository,
   transactionRepository,
   holdingRepository,
-  goalRepository,
 } from './repositories';
 
 export type {
@@ -20,7 +19,4 @@ export type {
   UpdateHoldingInput,
   HoldingWithRelations,
   HoldingWithAsset,
-  CreateGoalInput,
-  UpdateGoalInput,
-  GoalWithPerson,
 } from './repositories';

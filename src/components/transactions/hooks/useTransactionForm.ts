@@ -3,17 +3,11 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { usePortfolioStore, DbPerson } from '@/store/usePortfolioStore';
 import { AssetType } from '@/types';
+import type { AssetSearchResult } from '@/types/transactionSearch';
 import { format } from 'date-fns';
 
-export interface SearchResult {
-  symbol: string;
-  name: string;
-  type: string;
-  assetType?: AssetType;
-  exchange?: string;
-  id?: string;
-  quantity?: number;
-}
+/** @deprecated Use `AssetSearchResult` from `@/types/transactionSearch`. */
+export type SearchResult = AssetSearchResult;
 
 export interface TransactionFormState {
   personId: string;

@@ -41,7 +41,7 @@ function LoadingSkeleton() {
 
 export function SectionCards() {
   usePrivacy();
-  const { summary, isLoading: pricesLoading } = usePortfolioWithPrices()
+  const { summary } = usePortfolioWithPrices()
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)
   const isInitialized = usePortfolioStore((state) => state.isInitialized)

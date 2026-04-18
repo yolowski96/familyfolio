@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
-import { AssetType } from '@/types';
+import { AssetType, PriceData } from '@/types';
 
 // =============================================================================
 // DATABASE-BACKED STORE TYPES
@@ -64,25 +64,6 @@ export interface DbHolding {
   };
 }
 
-export interface DbGoal {
-  id: string;
-  personId?: string | null;
-  name: string;
-  type: 'PORTFOLIO_VALUE' | 'MONTHLY_INVESTMENT' | 'ASSET_TARGET' | 'DIVERSIFICATION';
-  targetValue: number | string;
-  currentValue: number | string;
-  deadline?: string | null;
-  assetSymbol?: string | null;
-  assetType?: AssetType | null;
-  isCompleted: boolean;
-  createdAt: string;
-  person?: {
-    id: string;
-    name: string;
-    color: string;
-  } | null;
-}
-
 // =============================================================================
 // STORE INTERFACE
 // =============================================================================
@@ -92,14 +73,20 @@ interface PortfolioState {
   persons: DbPerson[];
   transactions: DbTransaction[];
   holdings: DbHolding[];
-  goals: DbGoal[];
-  
+
+  // Live (EUR-converted) prices keyed by asset symbol. Populated by the
+  // dashboard endpoint and `refreshLivePrices`. Used by the summary
+  // calculator to render instantly without waiting on a separate
+  // `/api/prices` round-trip.
+  livePrices: Record<string, PriceData>;
+  livePricesUpdatedAt: number | null;
+
   // UI State
   activePersonId: string | 'ALL';
   isLoading: boolean;
   error: string | null;
   isInitialized: boolean;
-  
+
   // Person Actions
   loadPersons: () => Promise<void>;
   addPerson: (name: string, color: string) => Promise<DbPerson | null>;
@@ -107,23 +94,18 @@ interface PortfolioState {
   deletePerson: (id: string) => Promise<void>;
   setActivePerson: (id: string | 'ALL') => void;
   setDefaultPerson: (id: string) => Promise<void>;
-  
+
   // Transaction Actions
   loadTransactions: (personId?: string) => Promise<void>;
   addTransaction: (transaction: Omit<DbTransaction, 'id' | 'person' | 'totalAmount' | 'currency' | 'fee'> & { totalAmount?: number | string; currency?: string; fee?: number | string }) => Promise<DbTransaction | null>;
   updateTransaction: (id: string, updates: Partial<DbTransaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
-  
+
   // Holding Actions
   loadHoldings: (personId?: string) => Promise<void>;
   refreshPrices: () => Promise<void>;
-  
-  // Goal Actions
-  loadGoals: () => Promise<void>;
-  addGoal: (goal: Omit<DbGoal, 'id' | 'createdAt' | 'isCompleted' | 'currentValue' | 'person'>) => Promise<DbGoal | null>;
-  updateGoal: (id: string, updates: Partial<DbGoal>) => Promise<void>;
-  deleteGoal: (id: string) => Promise<void>;
-  
+  refreshLivePrices: () => Promise<void>;
+
   // Utility Actions
   loadAll: () => Promise<void>;
   loadBatch: (parts: ('transactions' | 'persons' | 'holdings')[]) => Promise<void>;
@@ -142,7 +124,8 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
   persons: [],
   transactions: [],
   holdings: [],
-  goals: [],
+  livePrices: {},
+  livePricesUpdatedAt: null,
   activePersonId: 'ALL',
   isLoading: false,
   error: null,
@@ -410,129 +393,92 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
         const data = await response.json();
         throw new Error(data.error || 'Failed to update prices');
       }
-      // Reload holdings with new prices
-      await get().loadHoldings();
+      // Reload holdings with new prices, and refresh the in-memory live price
+      // map so the summary picks up the new values.
+      await Promise.all([
+        get().loadHoldings(),
+        get().refreshLivePrices(),
+      ]);
       set({ isLoading: false });
     } catch (error) {
       console.error('Error updating prices:', error);
-      set({ 
-        error: error instanceof Error ? error.message : 'Failed to update prices', 
-        isLoading: false 
+      set({
+        error: error instanceof Error ? error.message : 'Failed to update prices',
+        isLoading: false
       });
     }
   },
-  
-  // =========================================================================
-  // GOAL ACTIONS
-  // =========================================================================
-  
-  loadGoals: async () => {
-    try {
-      const response = await fetch('/api/goals');
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to load goals');
-      }
-      const goals = await response.json();
-      set({ goals });
-    } catch (error) {
-      console.error('Error loading goals:', error);
-      throw error;
+
+  refreshLivePrices: async () => {
+    const holdings = get().holdings;
+    if (holdings.length === 0) {
+      set({ livePrices: {}, livePricesUpdatedAt: Date.now() });
+      return;
     }
-  },
-  
-  addGoal: async (goal) => {
-    set({ isLoading: true, error: null });
+
+    const uniqueAssets = new Map<string, { symbol: string; assetType: AssetType }>();
+    for (const h of holdings) {
+      if (!uniqueAssets.has(h.assetSymbol)) {
+        uniqueAssets.set(h.assetSymbol, {
+          symbol: h.assetSymbol,
+          assetType: h.assetType,
+        });
+      }
+    }
+
     try {
-      const response = await fetch('/api/goals', {
+      const response = await fetch('/api/prices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(goal),
+        body: JSON.stringify({
+          assets: Array.from(uniqueAssets.values()),
+          convertTo: 'EUR',
+        }),
       });
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to create goal');
+        console.error('refreshLivePrices: non-OK response', response.status);
+        return;
       }
-      const newGoal = await response.json();
-      set({
-        goals: [newGoal, ...get().goals],
-        isLoading: false,
-      });
-      return newGoal;
+      const livePrices: Record<string, PriceData> = await response.json();
+      set({ livePrices, livePricesUpdatedAt: Date.now() });
     } catch (error) {
-      console.error('Error creating goal:', error);
-      set({ 
-        error: error instanceof Error ? error.message : 'Failed to create goal', 
-        isLoading: false 
-      });
-      return null;
-    }
-  },
-  
-  updateGoal: async (id, updates) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await fetch(`/api/goals/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to update goal');
-      }
-      const updatedGoal = await response.json();
-      set({
-        goals: get().goals.map(g => g.id === id ? updatedGoal : g),
-        isLoading: false,
-      });
-    } catch (error) {
-      console.error('Error updating goal:', error);
-      set({ 
-        error: error instanceof Error ? error.message : 'Failed to update goal', 
-        isLoading: false 
-      });
-    }
-  },
-  
-  deleteGoal: async (id) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await fetch(`/api/goals/${id}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to delete goal');
-      }
-      set({
-        goals: get().goals.filter(g => g.id !== id),
-        isLoading: false,
-      });
-    } catch (error) {
-      console.error('Error deleting goal:', error);
-      set({ 
-        error: error instanceof Error ? error.message : 'Failed to delete goal', 
-        isLoading: false 
-      });
+      console.error('refreshLivePrices failed:', error);
     }
   },
   
   // =========================================================================
   // UTILITY ACTIONS
   // =========================================================================
-  
+
   loadAll: async () => {
     if (get().isLoading) return;
-    
+
     set({ isLoading: true, error: null });
     try {
-      await get().loadBatch(['holdings', 'persons']);
-      set({ isLoading: false, isInitialized: true });
+      const response = await fetch(
+        '/api/dashboard?include=holdings,persons,transactions,prices'
+      );
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to load dashboard data');
+      }
+      const data = await response.json();
+      const updates: Partial<PortfolioState> = {
+        isLoading: false,
+        isInitialized: true,
+      };
+      if (data.transactions) updates.transactions = data.transactions;
+      if (data.persons) updates.persons = data.persons;
+      if (data.holdings) updates.holdings = data.holdings;
+      if (data.prices) {
+        updates.livePrices = data.prices;
+        updates.livePricesUpdatedAt = Date.now();
+      }
+      set(updates);
     } catch (error) {
       console.error('Error loading all data:', error);
-      set({ 
-        error: error instanceof Error ? error.message : 'Failed to load data', 
+      set({
+        error: error instanceof Error ? error.message : 'Failed to load data',
         isLoading: false,
         isInitialized: true,
       });
@@ -575,7 +521,8 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
     persons: [],
     transactions: [],
     holdings: [],
-    goals: [],
+    livePrices: {},
+    livePricesUpdatedAt: null,
     activePersonId: 'ALL',
     isLoading: false,
     error: null,
@@ -616,74 +563,3 @@ export function useFilteredHoldings(): DbHolding[] {
     return holdings.filter((h) => h.personId === activePersonId);
   }, [holdings, activePersonId]);
 }
-
-/**
- * Get filtered goals based on active person
- */
-export function useFilteredGoals(): DbGoal[] {
-  const goals = usePortfolioStore((state) => state.goals);
-  const activePersonId = usePortfolioStore((state) => state.activePersonId);
-
-  return useMemo(() => {
-    if (activePersonId === 'ALL') {
-      return goals;
-    }
-    return goals.filter((g) => g.personId === activePersonId || g.personId === null);
-  }, [goals, activePersonId]);
-}
-
-/**
- * Calculate portfolio summary from holdings
- */
-export function usePortfolioSummary() {
-  const holdings = useFilteredHoldings();
-
-  return useMemo(() => {
-    let totalValue = 0;
-    let totalInvested = 0;
-
-    const holdingsByType = new Map<AssetType, number>();
-
-    for (const holding of holdings) {
-      const currentValue = Number(holding.currentValue) || 0;
-      const invested = Number(holding.totalInvested) || 0;
-
-      totalValue += currentValue;
-      totalInvested += invested;
-
-      const typeValue = holdingsByType.get(holding.assetType) || 0;
-      holdingsByType.set(holding.assetType, typeValue + currentValue);
-    }
-
-    const totalPL = totalValue - totalInvested;
-    const totalPLPercent = totalInvested > 0 ? (totalPL / totalInvested) * 100 : 0;
-
-    // Find top performer
-    const topPerformer = holdings.reduce<DbHolding | null>((top, current) => {
-      if (!top) return current;
-      const topPL = Number(top.profitLossPercent) || 0;
-      const currentPL = Number(current.profitLossPercent) || 0;
-      return currentPL > topPL ? current : top;
-    }, null);
-
-    // Allocation by type
-    const allocationByType = Array.from(holdingsByType.entries()).map(([type, value]) => ({
-      type,
-      value,
-      percent: totalValue > 0 ? (value / totalValue) * 100 : 0,
-    }));
-
-    return {
-      totalBalance: totalValue,
-      totalInvested,
-      totalPL,
-      totalPLPercent,
-      topPerformer,
-      holdings,
-      allocationByType,
-    };
-  }, [holdings]);
-}
-
-// Legacy alias for backward compatibility
-export const useDatabaseStore = usePortfolioStore;

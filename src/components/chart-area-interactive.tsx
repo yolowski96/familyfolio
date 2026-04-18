@@ -1,9 +1,9 @@
-"use client"
+'use client';
 
-import * as React from "react"
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import * as React from 'react';
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 
-import { useIsMobile } from "@/hooks/use-mobile"
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   Card,
   CardAction,
@@ -11,114 +11,73 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from '@/components/ui/card';
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
-} from "@/components/ui/chart"
+} from '@/components/ui/chart';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group"
-import { usePortfolioStore } from "@/store/usePortfolioStore"
-import { usePortfolioWithPrices } from "@/hooks/usePortfolioWithPrices"
-
-// Generate mock historical data based on current portfolio value
-function generateHistoricalData(currentValue: number, days: number) {
-  const data = []
-  const today = new Date()
-  
-  // Use a seeded random for consistent results
-  let seed = Math.floor(currentValue * 100) + days
-  const seededRandom = () => {
-    seed = (seed * 9301 + 49297) % 233280
-    return seed / 233280
-  }
-  
-  const volatility = 0.015 // 1.5% daily volatility
-  let value = currentValue * (1 - (days * 0.0008)) // Start slightly lower in the past
-  
-  for (let i = days; i >= 0; i--) {
-    const date = new Date(today)
-    date.setDate(date.getDate() - i)
-    
-    // Seeded random walk with slight upward bias
-    const change = (seededRandom() - 0.48) * volatility * value
-    value = Math.max(value + change, value * 0.95)
-    
-    // Ensure we end close to current value on last day
-    if (i === 0) {
-      value = currentValue
-    }
-    
-    data.push({
-      date: date.toISOString().split('T')[0],
-      value: Math.round(value * 100) / 100,
-    })
-  }
-  
-  return data
-}
+  useFilteredTransactions,
+  usePortfolioStore,
+} from '@/store/usePortfolioStore';
+import { usePortfolioWithPrices } from '@/hooks/usePortfolioWithPrices';
+import { buildPortfolioHistory } from '@/lib/portfolio/history';
 
 const chartConfig = {
   value: {
-    label: "Portfolio Value",
-    color: "var(--color-primary)",
+    label: 'Portfolio Value',
+    color: 'var(--color-primary)',
   },
-} satisfies ChartConfig
+} satisfies ChartConfig;
 
 const TIME_RANGES = {
-  "1d": { days: 1, label: "1 day" },
-  "1w": { days: 7, label: "1 week" },
-  "1m": { days: 30, label: "1 month" },
-  "1y": { days: 365, label: "1 year" },
-  "all": { days: 730, label: "all time" },
-} as const
+  '1d': { days: 1, label: '1 day' },
+  '1w': { days: 7, label: '1 week' },
+  '1m': { days: 30, label: '1 month' },
+  '1y': { days: 365, label: '1 year' },
+  all: { days: 730, label: 'all time' },
+} as const;
 
-type TimeRangeKey = keyof typeof TIME_RANGES
+type TimeRangeKey = keyof typeof TIME_RANGES;
 
 export function ChartAreaInteractive() {
-  const isMobile = useIsMobile()
-  const [timeRange, setTimeRange] = React.useState<TimeRangeKey>("1m")
-  const { summary } = usePortfolioWithPrices()
-  const persons = usePortfolioStore((state) => state.persons)
-  const activePersonId = usePortfolioStore((state) => state.activePersonId)
-  const isInitialized = usePortfolioStore((state) => state.isInitialized)
-  const storeLoading = usePortfolioStore((state) => state.isLoading)
+  const isMobile = useIsMobile();
+  const [timeRange, setTimeRange] = React.useState<TimeRangeKey>('1m');
+  const { summary, livePrices } = usePortfolioWithPrices();
+  const persons = usePortfolioStore((state) => state.persons);
+  const activePersonId = usePortfolioStore((state) => state.activePersonId);
+  const isInitialized = usePortfolioStore((state) => state.isInitialized);
+  const storeLoading = usePortfolioStore((state) => state.isLoading);
+  const transactions = useFilteredTransactions();
 
   React.useEffect(() => {
-    if (isMobile) {
-      setTimeRange("1w")
-    }
-  }, [isMobile])
+    if (isMobile) setTimeRange('1w');
+  }, [isMobile]);
 
-  // Memoize days calculation
-  const days = React.useMemo(() => {
-    return TIME_RANGES[timeRange].days
-  }, [timeRange])
+  const days = TIME_RANGES[timeRange].days;
 
-  // Memoize chart data with stable dependencies
   const chartData = React.useMemo(() => {
-    if (summary.totalBalance === 0) return []
-    return generateHistoricalData(summary.totalBalance, days)
-  }, [summary.totalBalance, days])
+    if (transactions.length === 0 || summary.totalBalance === 0) return [];
+    return buildPortfolioHistory(transactions, livePrices, days);
+  }, [transactions, livePrices, days, summary.totalBalance]);
 
-  const viewName = activePersonId === 'ALL' 
-    ? 'Family Portfolio' 
-    : persons.find(p => p.id === activePersonId)?.name || 'Portfolio'
+  const viewName =
+    activePersonId === 'ALL'
+      ? 'Family Portfolio'
+      : persons.find((p) => p.id === activePersonId)?.name || 'Portfolio';
 
-  const periodLabel = TIME_RANGES[timeRange].label
+  const periodLabel = TIME_RANGES[timeRange].label;
 
-  // Show loading skeleton while data is being fetched
   if (!isInitialized || storeLoading) {
     return (
       <Card className="@container/card">
@@ -130,7 +89,7 @@ export function ChartAreaInteractive() {
           <div className="w-full h-full bg-muted/50 rounded animate-pulse" />
         </CardContent>
       </Card>
-    )
+    );
   }
 
   if (chartData.length === 0) {
@@ -138,13 +97,15 @@ export function ChartAreaInteractive() {
       <Card className="@container/card">
         <CardHeader>
           <CardTitle>Portfolio Value</CardTitle>
-          <CardDescription>Add transactions to see your portfolio chart</CardDescription>
+          <CardDescription>
+            Add transactions to see your portfolio chart
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center h-[250px]">
           <p className="text-muted-foreground">No data to display</p>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -153,7 +114,8 @@ export function ChartAreaInteractive() {
         <CardTitle>Portfolio Value</CardTitle>
         <CardDescription>
           <span className="hidden @[540px]/card:block">
-            {viewName} performance over the last {periodLabel}
+            {viewName} holdings valued at today&apos;s prices over the last{' '}
+            {periodLabel}
           </span>
           <span className="@[540px]/card:hidden">Last {periodLabel}</span>
         </CardDescription>
@@ -161,7 +123,9 @@ export function ChartAreaInteractive() {
           <ToggleGroup
             type="single"
             value={timeRange}
-            onValueChange={(value) => value && setTimeRange(value as TimeRangeKey)}
+            onValueChange={(value) =>
+              value && setTimeRange(value as TimeRangeKey)
+            }
             variant="outline"
             className="hidden *:data-[slot=toggle-group-item]:!px-3 @[540px]/card:flex"
           >
@@ -171,7 +135,10 @@ export function ChartAreaInteractive() {
             <ToggleGroupItem value="1y">1Y</ToggleGroupItem>
             <ToggleGroupItem value="all">ALL</ToggleGroupItem>
           </ToggleGroup>
-          <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRangeKey)}>
+          <Select
+            value={timeRange}
+            onValueChange={(v) => setTimeRange(v as TimeRangeKey)}
+          >
             <SelectTrigger
               className="flex w-24 **:data-[slot=select-value]:block **:data-[slot=select-value]:truncate @[540px]/card:hidden"
               size="sm"
@@ -180,11 +147,21 @@ export function ChartAreaInteractive() {
               <SelectValue placeholder="1M" />
             </SelectTrigger>
             <SelectContent className="rounded-xl">
-              <SelectItem value="1d" className="rounded-lg">1D</SelectItem>
-              <SelectItem value="1w" className="rounded-lg">1W</SelectItem>
-              <SelectItem value="1m" className="rounded-lg">1M</SelectItem>
-              <SelectItem value="1y" className="rounded-lg">1Y</SelectItem>
-              <SelectItem value="all" className="rounded-lg">ALL</SelectItem>
+              <SelectItem value="1d" className="rounded-lg">
+                1D
+              </SelectItem>
+              <SelectItem value="1w" className="rounded-lg">
+                1W
+              </SelectItem>
+              <SelectItem value="1m" className="rounded-lg">
+                1M
+              </SelectItem>
+              <SelectItem value="1y" className="rounded-lg">
+                1Y
+              </SelectItem>
+              <SelectItem value="all" className="rounded-lg">
+                ALL
+              </SelectItem>
             </SelectContent>
           </Select>
         </CardAction>
@@ -217,11 +194,11 @@ export function ChartAreaInteractive() {
               tickMargin={8}
               minTickGap={32}
               tickFormatter={(value) => {
-                const date = new Date(value)
-                return date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                })
+                const date = new Date(value);
+                return date.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                });
               }}
             />
             <YAxis
@@ -236,15 +213,15 @@ export function ChartAreaInteractive() {
               content={
                 <ChartTooltipContent
                   labelFormatter={(value) => {
-                    return new Date(value).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })
+                    return new Date(value).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    });
                   }}
                   formatter={(value) => [
                     `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
-                    "Value"
+                    'Value',
                   ]}
                   indicator="dot"
                 />
@@ -261,5 +238,5 @@ export function ChartAreaInteractive() {
         </ChartContainer>
       </CardContent>
     </Card>
-  )
+  );
 }

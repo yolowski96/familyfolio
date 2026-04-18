@@ -1,15 +1,10 @@
 'use client';
 
-import {
-  IconCurrencyBitcoin,
-  IconCurrencyEuro,
-  IconTrendingDown,
-  IconTrendingUp,
-} from '@tabler/icons-react';
+import { IconTrendingDown, IconTrendingUp } from '@tabler/icons-react';
 import { usePrivacy } from '@/components/providers/PrivacyProvider';
-import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
-import { TYPE_COLORS } from './HoldingCard';
+import { AssetTypeIcon, TYPE_COLORS } from '@/lib/assetTypeDisplay';
+import { SummaryStatCard } from '@/components/shared/SummaryStatCard';
 
 interface HoldingsSummaryStatsProps {
   cryptoCount: number;
@@ -25,54 +20,45 @@ export function HoldingsSummaryStats({
   totalPL,
 }: HoldingsSummaryStatsProps) {
   usePrivacy();
+  const plPositive = totalPL >= 0;
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Card>
-        <CardContent className="flex items-center gap-4 pt-0">
-          <div className={`flex size-12 items-center justify-center rounded-lg ${TYPE_COLORS.CRYPTO}`}>
-            <IconCurrencyBitcoin className="size-6" />
-          </div>
-          <div>
-            <p className="text-muted-foreground text-sm">Crypto</p>
-            <p className="text-xl font-semibold">{cryptoCount} assets</p>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="flex items-center gap-4 pt-0">
-          <div className={`flex size-12 items-center justify-center rounded-lg ${TYPE_COLORS.STOCK}`}>
-            <IconCurrencyEuro className="size-6" />
-          </div>
-          <div>
-            <p className="text-muted-foreground text-sm">Stocks</p>
-            <p className="text-xl font-semibold">{stockCount} assets</p>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="flex items-center gap-4 pt-0">
-          <div className={`flex size-12 items-center justify-center rounded-lg ${TYPE_COLORS.ETF}`}>
+      <SummaryStatCard
+        label="Crypto"
+        value={`${cryptoCount} assets`}
+        icon={<AssetTypeIcon type="CRYPTO" size="lg" />}
+        iconClassName={TYPE_COLORS.CRYPTO}
+      />
+      <SummaryStatCard
+        label="Stocks"
+        value={`${stockCount} assets`}
+        icon={<AssetTypeIcon type="STOCK" size="lg" />}
+        iconClassName={TYPE_COLORS.STOCK}
+      />
+      <SummaryStatCard
+        label="ETFs"
+        value={`${etfCount} assets`}
+        icon={<AssetTypeIcon type="ETF" size="lg" />}
+        iconClassName={TYPE_COLORS.ETF}
+      />
+      <SummaryStatCard
+        label="Total P/L"
+        value={formatCurrency(totalPL)}
+        icon={
+          plPositive ? (
             <IconTrendingUp className="size-6" />
-          </div>
-          <div>
-            <p className="text-muted-foreground text-sm">ETFs</p>
-            <p className="text-xl font-semibold">{etfCount} assets</p>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="flex items-center gap-4 pt-0">
-          <div className={`flex size-12 items-center justify-center rounded-lg ${totalPL >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-            {totalPL >= 0 ? <IconTrendingUp className="size-6" /> : <IconTrendingDown className="size-6" />}
-          </div>
-          <div>
-            <p className="text-muted-foreground text-sm">Total P/L</p>
-            <p className={`text-xl font-semibold ${totalPL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-              {formatCurrency(totalPL)}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+          ) : (
+            <IconTrendingDown className="size-6" />
+          )
+        }
+        iconClassName={
+          plPositive
+            ? 'bg-emerald-500/10 text-emerald-500'
+            : 'bg-rose-500/10 text-rose-500'
+        }
+        valueClassName={plPositive ? 'text-emerald-500' : 'text-rose-500'}
+      />
     </div>
   );
 }

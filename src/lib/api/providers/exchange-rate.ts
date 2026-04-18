@@ -48,7 +48,7 @@ export class ExchangeRateProvider {
     try {
       const url = `${this.baseUrl}/${baseCurrency}`;
       
-      const response = await fetch(url);
+      const response = await fetch(url, { next: { revalidate: 3600 } });
       
       if (!response.ok) {
         console.error('Exchange rate API error:', response.status);

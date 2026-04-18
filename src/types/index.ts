@@ -60,20 +60,3 @@ export interface PortfolioSummary {
     percent: number;
   }[];
 }
-
-export type GoalType = 'PORTFOLIO_VALUE' | 'MONTHLY_INVESTMENT' | 'ASSET_TARGET' | 'DIVERSIFICATION';
-
-export interface Goal {
-  id: string;
-  name: string;
-  type: GoalType;
-  targetValue: number;
-  currentValue: number;
-  deadline?: string | null;
-  portfolioId?: string | null;
-  assetSymbol?: string | null;
-  assetType?: AssetType | null;
-  createdAt: string;
-  isCompleted: boolean;
-}
-

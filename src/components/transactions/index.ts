@@ -1,6 +1,5 @@
 export { AddTransactionDialog } from './AddTransactionDialog';
 export { AssetSearchInput } from './AssetSearchInput';
-export { TransactionsPagination } from './TransactionsPagination';
 export { TransactionsSkeleton } from './TransactionsSkeleton';
 export { TransactionsSummaryStats } from './TransactionsSummaryStats';
 export { TransactionsTable } from './TransactionsTable';

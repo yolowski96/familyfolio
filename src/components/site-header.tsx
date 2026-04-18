@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useRef } from "react"
+import { usePathname } from "next/navigation"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
@@ -15,7 +16,25 @@ import { IconChevronDown, IconUsers, IconWallet } from "@tabler/icons-react"
 import { PrivacyToggle } from "@/components/layout/PrivacyToggle"
 import { ThemeToggle } from "@/components/layout/ThemeToggle"
 
+const PAGE_TITLES: Record<string, string> = {
+  "/": "Dashboard",
+  "/holdings": "Holdings",
+  "/transactions": "Transactions",
+  "/analytics": "Analytics",
+  "/settings": "Settings",
+}
+
+function getPageTitle(pathname: string | null): string {
+  if (!pathname) return "Dashboard"
+  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname]
+  const match = Object.keys(PAGE_TITLES)
+    .filter((p) => p !== "/" && pathname.startsWith(p))
+    .sort((a, b) => b.length - a.length)[0]
+  return match ? PAGE_TITLES[match] : "Dashboard"
+}
+
 export function SiteHeader() {
+  const pathname = usePathname()
   const persons = usePortfolioStore((state) => state.persons)
   const activePersonId = usePortfolioStore((state) => state.activePersonId)
   const setActivePerson = usePortfolioStore((state) => state.setActivePerson)
@@ -43,7 +62,7 @@ export function SiteHeader() {
           orientation="vertical"
           className="mx-2 hidden sm:block data-[orientation=vertical]:h-4"
         />
-        <h1 className="text-base font-medium hidden sm:block">Dashboard</h1>
+        <h1 className="text-base font-medium hidden sm:block">{getPageTitle(pathname)}</h1>
         <div className="ml-auto flex items-center gap-2 shrink-0">
           <DropdownMenu onOpenChange={handleDropdownOpen}>
             <DropdownMenuTrigger asChild>

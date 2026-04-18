@@ -18,19 +18,11 @@ import {
 } from "@/components/ui/table"
 import { usePrivacy } from "@/components/providers/PrivacyProvider"
 import { formatCurrency, formatQuantity } from "@/lib/utils"
+import { formatPercent } from "@/lib/format"
+import { TYPE_COLORS } from "@/lib/assetTypeDisplay"
 import { usePortfolioStore } from "@/store/usePortfolioStore"
 import { usePortfolioWithPrices } from "@/hooks/usePortfolioWithPrices"
-import { AssetType } from "@/types"
-
-function formatPercent(value: number): string {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
-}
-
-const TYPE_COLORS: Record<AssetType, string> = {
-  CRYPTO: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
-  STOCK: 'bg-violet-500/10 text-violet-500 border-violet-500/20',
-  ETF: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-}
+import { AssetHolding } from "@/types"
 
 export function DataTable() {
   usePrivacy();
@@ -46,9 +38,10 @@ export function DataTable() {
 
   const sortedHoldings = React.useMemo(() => {
     if (!sortField) return holdings
+    const key = sortField as keyof AssetHolding
     return [...holdings].sort((a, b) => {
-      const aVal = (a as any)[sortField] ?? 0
-      const bVal = (b as any)[sortField] ?? 0
+      const aVal = Number(a[key] ?? 0)
+      const bVal = Number(b[key] ?? 0)
       return sortDir === 'asc' ? aVal - bVal : bVal - aVal
     })
   }, [holdings, sortField, sortDir])
