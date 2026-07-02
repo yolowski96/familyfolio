@@ -25,10 +25,22 @@ export async function GET(request: NextRequest) {
     const holdings = await holdingRepository.findByPersonId(person.userId, person.id);
 
     // Live prices (5-min server cache in priceService); stored holding price
-    // is the fallback when a provider fails for a symbol.
-    const livePrices = await priceService.batchGetPrices(
-      holdings.map((h) => ({ symbol: h.assetSymbol, assetType: h.assetType as AssetType }))
+    // is the fallback when a provider fails for a symbol. avgPrice is stored
+    // in the holding's currency, so live prices must be converted to the same
+    // currency or USD assets (crypto, futures) come back unusable next to EUR
+    // cost bases. One batch call per distinct holding currency.
+    const byCurrency = new Map<string, { symbol: string; assetType: AssetType }[]>();
+    for (const h of holdings) {
+      const group = byCurrency.get(h.currency) ?? [];
+      group.push({ symbol: h.assetSymbol, assetType: h.assetType as AssetType });
+      byCurrency.set(h.currency, group);
+    }
+    const priceBatches = await Promise.all(
+      Array.from(byCurrency, ([currency, assets]) =>
+        priceService.batchGetPrices(assets, currency)
+      )
     );
+    const livePrices = new Map(priceBatches.flatMap((batch) => [...batch]));
 
     const positions: Position[] = holdings.map((h) => ({
       ticker: h.assetSymbol,
