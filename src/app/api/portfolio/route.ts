@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { transactionRepository, holdingRepository, personRepository } from '@/lib/db/repositories';
-import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { handleApiError } from '@/lib/api/handle-error';
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,11 +27,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('GET /api/portfolio error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch portfolio data' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'GET /api/portfolio');
   }
 }

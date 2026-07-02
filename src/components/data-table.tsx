@@ -20,19 +20,46 @@ import { usePrivacy } from "@/components/providers/PrivacyProvider"
 import { formatCurrency, formatQuantity } from "@/lib/utils"
 import { formatPercent } from "@/lib/format"
 import { TYPE_COLORS } from "@/lib/assetTypeDisplay"
-import { usePortfolioStore } from "@/store/usePortfolioStore"
+import { useHoldings, usePersons } from "@/lib/queries"
+import { useActivePersonId } from "@/store/useUiStore"
 import { usePortfolioWithPrices } from "@/hooks/usePortfolioWithPrices"
 import { AssetHolding } from "@/types"
+
+type SortDir = 'asc' | 'desc'
+
+function SortButton({
+  field,
+  children,
+  className = "",
+  sortField,
+  sortDir,
+  onToggle,
+}: {
+  field: string
+  children: React.ReactNode
+  className?: string
+  sortField: string | null
+  sortDir: SortDir
+  onToggle: (field: string) => void
+}) {
+  return (
+    <Button variant="ghost" size="sm" className={`-ml-3 h-8 ${className}`} onClick={() => onToggle(field)}>
+      {children}
+      <span className="ml-1 text-xs opacity-50">
+        {sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+      </span>
+    </Button>
+  )
+}
 
 export function DataTable() {
   usePrivacy();
   const { summary } = usePortfolioWithPrices()
-  const persons = usePortfolioStore((state) => state.persons)
-  const activePersonId = usePortfolioStore((state) => state.activePersonId)
-  const isInitialized = usePortfolioStore((state) => state.isInitialized)
-  const storeLoading = usePortfolioStore((state) => state.isLoading)
+  const { data: persons = [] } = usePersons()
+  const activePersonId = useActivePersonId()
+  const { isPending: isLoading } = useHoldings()
   const [sortField, setSortField] = React.useState<string | null>(null)
-  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc')
+  const [sortDir, setSortDir] = React.useState<SortDir>('desc')
 
   const holdings = summary.holdings
 
@@ -46,27 +73,22 @@ export function DataTable() {
     })
   }, [holdings, sortField, sortDir])
 
-  const toggleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
+  const toggleSort = React.useCallback((field: string) => {
+    setSortField((prevField) => {
+      if (prevField === field) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+        return prevField
+      }
       setSortDir('desc')
-    }
-  }
+      return field
+    })
+  }, [])
 
-  const viewName = activePersonId === 'ALL' 
-    ? 'Family Portfolio' 
+  const viewName = activePersonId === 'ALL'
+    ? 'Family Portfolio'
     : persons.find(p => p.id === activePersonId)?.name || 'Portfolio'
 
-  const SortButton = ({ field, children, className = "" }: { field: string; children: React.ReactNode; className?: string }) => (
-    <Button variant="ghost" size="sm" className={`-ml-3 h-8 ${className}`} onClick={() => toggleSort(field)}>
-      {children}
-      <span className="ml-1 text-xs opacity-50">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
-    </Button>
-  )
-
-  if (!isInitialized || storeLoading) {
+  if (isLoading) {
     return (
       <div className="w-full flex flex-col gap-4 px-4 lg:px-6">
         <h2 className="text-lg font-semibold">Holdings</h2>
@@ -107,12 +129,24 @@ export function DataTable() {
         <Table>
           <TableHeader className="bg-muted">
             <TableRow>
-              <TableHead><SortButton field="symbol">Asset</SortButton></TableHead>
-              <TableHead className="text-right"><SortButton field="currentPrice">Price</SortButton></TableHead>
-              <TableHead className="text-right"><SortButton field="totalQuantity">Balance</SortButton></TableHead>
-              <TableHead className="text-right"><SortButton field="change24hPercent">24h</SortButton></TableHead>
-              <TableHead className="text-right"><SortButton field="unrealizedPL">P/L</SortButton></TableHead>
-              <TableHead className="text-right"><SortButton field="totalValue">Value</SortButton></TableHead>
+              <TableHead>
+                <SortButton field="symbol" sortField={sortField} sortDir={sortDir} onToggle={toggleSort}>Asset</SortButton>
+              </TableHead>
+              <TableHead className="text-right">
+                <SortButton field="currentPrice" sortField={sortField} sortDir={sortDir} onToggle={toggleSort}>Price</SortButton>
+              </TableHead>
+              <TableHead className="text-right">
+                <SortButton field="totalQuantity" sortField={sortField} sortDir={sortDir} onToggle={toggleSort}>Balance</SortButton>
+              </TableHead>
+              <TableHead className="text-right">
+                <SortButton field="change24hPercent" sortField={sortField} sortDir={sortDir} onToggle={toggleSort}>24h</SortButton>
+              </TableHead>
+              <TableHead className="text-right">
+                <SortButton field="unrealizedPL" sortField={sortField} sortDir={sortDir} onToggle={toggleSort}>P/L</SortButton>
+              </TableHead>
+              <TableHead className="text-right">
+                <SortButton field="totalValue" sortField={sortField} sortDir={sortDir} onToggle={toggleSort}>Value</SortButton>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

@@ -5,7 +5,13 @@ import { IconDownload, IconPlus } from '@tabler/icons-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { useFilteredTransactions, usePortfolioStore } from '@/store/usePortfolioStore';
+import { useFilteredTransactions } from '@/hooks/useFilteredData';
+import {
+  usePersons,
+  useTransactions,
+  useDeleteTransaction,
+} from '@/lib/queries';
+import { useActivePersonId } from '@/store/useUiStore';
 import { usePersonName } from '@/hooks/usePersonName';
 import { DataTablePagination } from '@/components/shared/DataTablePagination';
 import { AddTransactionDialog } from './AddTransactionDialog';
@@ -17,13 +23,14 @@ import { useTransactionsFilter } from './hooks/useTransactionsFilter';
 
 export function TransactionsView() {
   const transactions = useFilteredTransactions();
-  const persons = usePortfolioStore((state) => state.persons);
-  const activePersonId = usePortfolioStore((state) => state.activePersonId);
-  const deleteTransaction = usePortfolioStore((state) => state.deleteTransaction);
-  const isInitialized = usePortfolioStore((state) => state.isInitialized);
-  const storeLoading = usePortfolioStore((state) => state.isLoading);
-  const storeTransactions = usePortfolioStore((state) => state.transactions);
-  const loadBatch = usePortfolioStore((state) => state.loadBatch);
+  const { data: persons = [] } = usePersons();
+  const activePersonId = useActivePersonId();
+  const { isPending: transactionsPending } = useTransactions();
+  const { mutateAsync: deleteTransactionMutation } = useDeleteTransaction();
+  const deleteTransaction = React.useCallback(
+    (id: string) => deleteTransactionMutation(id),
+    [deleteTransactionMutation]
+  );
 
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
@@ -31,18 +38,6 @@ export function TransactionsView() {
   });
 
   const filter = useTransactionsFilter(transactions, { activePersonId });
-
-  const didFetch = React.useRef(false);
-  React.useEffect(() => {
-    if (didFetch.current) return;
-    const needed: ('transactions' | 'persons')[] = [];
-    if (storeTransactions.length === 0) needed.push('transactions');
-    if (persons.length === 0) needed.push('persons');
-    if (needed.length > 0) {
-      didFetch.current = true;
-      loadBatch(needed).catch(console.error);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const viewName = activePersonId === 'ALL'
     ? 'All Portfolios'
@@ -96,7 +91,7 @@ export function TransactionsView() {
 
   const pageCount = Math.ceil(filter.filteredTransactions.length / pagination.pageSize);
 
-  if (!isInitialized || storeLoading) {
+  if (transactionsPending) {
     return <TransactionsSkeleton />;
   }
 

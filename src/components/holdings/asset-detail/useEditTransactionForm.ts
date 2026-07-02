@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { usePortfolioStore, DbTransaction } from '@/store/usePortfolioStore';
+import { useUpdateTransaction } from '@/lib/queries';
+import type { DbTransaction } from '@/types/db';
 
 type LastEdited = 'quantity' | 'total' | null;
 
@@ -11,7 +12,7 @@ type LastEdited = 'quantity' | 'total' | null;
  * doesn't carry 8 `useState` calls on top of everything else.
  */
 export function useEditTransactionForm() {
-  const updateTransactionAction = usePortfolioStore((s) => s.updateTransaction);
+  const { mutateAsync: updateTransactionAction } = useUpdateTransaction();
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<DbTransaction | null>(null);
@@ -84,11 +85,14 @@ export function useEditTransactionForm() {
 
   const save = useCallback(async () => {
     if (!editing) return;
-    await updateTransactionAction(editing.id, {
-      quantity: parseFloat(quantity),
-      pricePerUnit: parseFloat(price),
-      date,
-      type,
+    await updateTransactionAction({
+      id: editing.id,
+      updates: {
+        quantity: parseFloat(quantity),
+        pricePerUnit: parseFloat(price),
+        date,
+        type,
+      },
     });
     setOpen(false);
     setEditing(null);

@@ -1,10 +1,25 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePrivacy } from '@/components/providers/PrivacyProvider';
-import { AnalyticsOverviewTab } from './AnalyticsOverviewTab';
-import { AnalyticsPerformanceTab } from './AnalyticsPerformanceTab';
 import { useAnalyticsData } from './useAnalyticsData';
+
+const ChartsFallback = () => (
+  <div className="h-64 w-full animate-pulse rounded bg-muted/50" />
+);
+
+const AnalyticsOverviewTab = dynamic(
+  () => import('./AnalyticsOverviewTab').then((m) => m.AnalyticsOverviewTab),
+  { ssr: false, loading: ChartsFallback },
+);
+
+const AnalyticsPerformanceTab = dynamic(
+  () =>
+    import('./AnalyticsPerformanceTab').then((m) => m.AnalyticsPerformanceTab),
+  { ssr: false, loading: ChartsFallback },
+);
 
 export function AnalyticsView() {
   usePrivacy();

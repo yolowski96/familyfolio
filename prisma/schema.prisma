@@ -15,13 +15,15 @@ datasource db {
 // PERSON (Portfolio Owner)
 // ============================================
 model Person {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  name      String   @db.VarChar(100)
-  color     String   @db.VarChar(7) // Hex color code
-  isDefault Boolean  @default(false) @map("is_default")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  name         String   @db.VarChar(100)
+  color        String   @db.VarChar(7) // Hex color code
+  isDefault    Boolean  @default(false) @map("is_default")
+  apiKeyHash   String?  @unique @map("api_key_hash") @db.VarChar(64) // SHA-256 hex of external API key
+  apiKeyPrefix String?  @map("api_key_prefix") @db.VarChar(12) // first chars, shown in UI
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   transactions Transaction[]
   holdings     Holding[]
@@ -75,6 +77,8 @@ model Transaction {
   asset  Asset  @relation(fields: [assetSymbol], references: [symbol])
 
   @@index([userId], name: "idx_transaction_user")
+  @@index([userId, date(sort: Desc)], name: "idx_transaction_user_date")
+  @@index([userId, assetSymbol], name: "idx_transaction_user_asset")
   @@index([personId, date(sort: Desc)], name: "idx_transaction_person_date")
   @@index([assetSymbol], name: "idx_transaction_asset")
   @@index([date(sort: Desc)], name: "idx_transaction_date")

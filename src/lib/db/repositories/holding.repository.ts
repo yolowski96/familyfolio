@@ -1,4 +1,5 @@
-import { prisma, handlePrismaError } from '../prisma';
+import { prisma } from '../prisma';
+import { rethrowDbError } from '@/lib/api/handle-error';
 import type { Holding, AssetType, Prisma } from '@prisma/client';
 import Decimal from 'decimal.js';
 
@@ -47,7 +48,14 @@ export type TransactionData = {
 const includeRelations = {
   person: { select: { id: true, name: true, color: true } },
   asset: { select: { symbol: true, name: true, type: true } },
-};
+} satisfies Prisma.HoldingInclude;
+
+/**
+ * Either the root Prisma client or an interactive transaction client. Accept
+ * both so that repository methods can participate in an outer `$transaction`
+ * when atomicity across tables is required.
+ */
+type PrismaExec = typeof prisma | Prisma.TransactionClient;
 
 export class HoldingRepository {
   async findAll(userId: string): Promise<HoldingWithRelations[]> {
@@ -58,8 +66,7 @@ export class HoldingRepository {
         orderBy: { currentValue: 'desc' },
       });
     } catch (error) {
-      console.error('Error fetching holdings:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'HoldingRepository.findAll');
     }
   }
 
@@ -83,8 +90,7 @@ export class HoldingRepository {
         orderBy: { currentValue: 'desc' },
       });
     } catch (error) {
-      console.error('Error fetching holdings:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'HoldingRepository.findAllLean');
     }
   }
 
@@ -96,62 +102,39 @@ export class HoldingRepository {
         orderBy: { currentValue: 'desc' },
       });
     } catch (error) {
-      console.error('Error fetching holdings by person:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'HoldingRepository.findByPersonId');
     }
   }
 
-  async findOne(userId: string, personId: string, assetSymbol: string): Promise<HoldingWithRelations | null> {
+  async findOne(
+    userId: string,
+    personId: string,
+    assetSymbol: string
+  ): Promise<HoldingWithRelations | null> {
     try {
       return await prisma.holding.findFirst({
         where: { userId, personId, assetSymbol },
         include: includeRelations,
       });
     } catch (error) {
-      console.error('Error fetching holding:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async upsert(
-    userId: string,
-    personId: string,
-    assetSymbol: string,
-    assetName: string,
-    assetType: AssetType,
-    data: UpdateHoldingInput
-  ): Promise<Holding> {
-    try {
-      return await prisma.holding.upsert({
-        where: { unique_person_asset: { personId, assetSymbol } },
-        update: {
-          ...data,
-          lastPriceUpdate: data.currentPrice !== undefined ? new Date() : undefined,
-        },
-        create: {
-          userId,
-          personId,
-          assetSymbol,
-          assetName,
-          assetType,
-          ...data,
-          lastPriceUpdate: data.currentPrice !== undefined ? new Date() : undefined,
-        },
-      });
-    } catch (error) {
-      console.error('Error upserting holding:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'HoldingRepository.findOne');
     }
   }
 
   /**
-   * Fast path: Update holding directly for a single transaction without full recalculation.
-   * Uses a single raw SQL upsert for BUY transactions (atomic and fast).
+   * Fast path: Update holding directly for a single BUY without full
+   * recalculation. For SELL we still need the full cost-basis recalc because
+   * the running average changes with every partial sell.
+   *
+   * Accepts an optional Prisma client (for participation in outer
+   * transactions). The `ON CONFLICT` guard ensures we can never write across
+   * users even if upstream validation is bypassed.
    */
   async updateHoldingForTransaction(
     userId: string,
     personId: string,
-    tx: TransactionData
+    tx: TransactionData,
+    client: PrismaExec = prisma
   ): Promise<void> {
     try {
       if (tx.type === 'BUY') {
@@ -159,7 +142,7 @@ export class HoldingRepository {
         const pricePerUnit = new Decimal(tx.pricePerUnit);
         const totalCost = quantity.times(pricePerUnit);
 
-        await prisma.$executeRaw`
+        await client.$executeRaw`
           INSERT INTO holdings (
             id, user_id, person_id, asset_symbol, asset_name, asset_type,
             quantity, average_price, total_invested, currency, created_at, updated_at
@@ -184,21 +167,30 @@ export class HoldingRepository {
               (holdings.quantity * holdings.average_price) + (EXCLUDED.quantity * EXCLUDED.average_price)
             ) / (holdings.quantity + EXCLUDED.quantity),
             updated_at = NOW()
+          WHERE holdings.user_id = EXCLUDED.user_id
         `;
       } else {
-        // SELL - need full recalculation for correct cost basis
-        await this.recalculateFromTransactions(userId, personId);
+        await this.recalculateFromTransactions(userId, personId, client);
       }
     } catch (error) {
-      console.error('Error updating holding for transaction:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'HoldingRepository.updateHoldingForTransaction');
     }
   }
 
-  async recalculateFromTransactions(userId: string, personId: string): Promise<void> {
+  /**
+   * Replay the full transaction history for a single `personId` to rebuild
+   * their holdings with correct running-average cost basis. Bulk-upserts all
+   * rows in a single SQL statement and bulk-deletes obsolete rows in another,
+   * independent of how many symbols are touched.
+   */
+  async recalculateFromTransactions(
+    userId: string,
+    personId: string,
+    client: PrismaExec = prisma
+  ): Promise<void> {
     try {
       const [transactions, existingHoldings] = await Promise.all([
-        prisma.transaction.findMany({
+        client.transaction.findMany({
           where: { userId, personId },
           select: {
             assetSymbol: true,
@@ -211,7 +203,7 @@ export class HoldingRepository {
           },
           orderBy: { date: 'asc' },
         }),
-        prisma.holding.findMany({
+        client.holding.findMany({
           where: { userId, personId },
           select: { assetSymbol: true },
         }),
@@ -221,7 +213,6 @@ export class HoldingRepository {
 
       for (const tx of transactions) {
         const key = tx.assetSymbol;
-
         if (!holdingsMap.has(key)) {
           holdingsMap.set(key, {
             assetSymbol: tx.assetSymbol,
@@ -254,86 +245,95 @@ export class HoldingRepository {
         }
       }
 
-      // Build batch operations for a single atomic transaction
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const operations: Prisma.PrismaPromise<any>[] = [];
+      // Build parallel arrays for bulk upsert via unnest
+      const symbols: string[] = [];
+      const names: string[] = [];
+      const types: string[] = [];
+      const quantities: number[] = [];
+      const avgPrices: number[] = [];
+      const invested: number[] = [];
+      const currencies: string[] = [];
 
-      // Find symbols to delete (zero quantity or orphaned)
-      const symbolsToDelete: string[] = [];
-      for (const [symbol, holdingData] of holdingsMap) {
-        if (holdingData.quantity.lte(0)) {
-          symbolsToDelete.push(symbol);
+      const keepSymbols = new Set<string>();
+
+      for (const [, h] of holdingsMap) {
+        if (h.quantity.gt(0)) {
+          const avgPrice = h.weightedPriceSum.div(h.quantity).toNumber();
+          symbols.push(h.assetSymbol);
+          names.push(h.assetName);
+          types.push(h.assetType);
+          quantities.push(h.quantity.toNumber());
+          avgPrices.push(avgPrice);
+          invested.push(h.totalInvested.toNumber());
+          currencies.push(h.currency);
+          keepSymbols.add(h.assetSymbol);
         }
       }
+
+      const symbolsToDelete: string[] = [];
       for (const existing of existingHoldings) {
-        if (!holdingsMap.has(existing.assetSymbol)) {
+        if (!keepSymbols.has(existing.assetSymbol)) {
           symbolsToDelete.push(existing.assetSymbol);
         }
       }
 
       if (symbolsToDelete.length > 0) {
-        operations.push(
-          prisma.holding.deleteMany({
-            where: { userId, personId, assetSymbol: { in: symbolsToDelete } },
-          })
-        );
+        await client.$executeRaw`
+          DELETE FROM holdings
+          WHERE user_id = ${userId}
+            AND person_id = ${personId}
+            AND asset_symbol = ANY(${symbolsToDelete}::text[])
+        `;
       }
 
-      // Build upserts for holdings with positive quantity
-      for (const [, holdingData] of holdingsMap) {
-        if (holdingData.quantity.gt(0)) {
-          const avgPrice = holdingData.weightedPriceSum.div(holdingData.quantity);
-          operations.push(
-            prisma.holding.upsert({
-              where: { unique_person_asset: { personId, assetSymbol: holdingData.assetSymbol } },
-              update: {
-                quantity: holdingData.quantity.toNumber(),
-                averagePrice: avgPrice.toNumber(),
-                totalInvested: holdingData.totalInvested.toNumber(),
-                currency: holdingData.currency,
-              },
-              create: {
-                userId,
-                personId,
-                assetSymbol: holdingData.assetSymbol,
-                assetName: holdingData.assetName,
-                assetType: holdingData.assetType,
-                quantity: holdingData.quantity.toNumber(),
-                averagePrice: avgPrice.toNumber(),
-                totalInvested: holdingData.totalInvested.toNumber(),
-                currency: holdingData.currency,
-              },
-            })
-          );
-        }
-      }
-
-      // Execute all deletes and upserts in a single atomic transaction
-      if (operations.length > 0) {
-        await prisma.$transaction(operations);
+      if (symbols.length > 0) {
+        await client.$executeRaw`
+          INSERT INTO holdings (
+            id, user_id, person_id, asset_symbol, asset_name, asset_type,
+            quantity, average_price, total_invested, currency, created_at, updated_at
+          )
+          SELECT
+            gen_random_uuid(),
+            ${userId},
+            ${personId},
+            s.symbol,
+            s.name,
+            s.type::"AssetType",
+            s.qty::numeric,
+            s.avg_price::numeric,
+            s.invested::numeric,
+            s.currency,
+            NOW(),
+            NOW()
+          FROM unnest(
+            ${symbols}::text[],
+            ${names}::text[],
+            ${types}::text[],
+            ${quantities}::double precision[],
+            ${avgPrices}::double precision[],
+            ${invested}::double precision[],
+            ${currencies}::text[]
+          ) AS s(symbol, name, type, qty, avg_price, invested, currency)
+          ON CONFLICT (person_id, asset_symbol) DO UPDATE SET
+            quantity = EXCLUDED.quantity,
+            average_price = EXCLUDED.average_price,
+            total_invested = EXCLUDED.total_invested,
+            currency = EXCLUDED.currency,
+            asset_name = EXCLUDED.asset_name,
+            asset_type = EXCLUDED.asset_type,
+            updated_at = NOW()
+          WHERE holdings.user_id = EXCLUDED.user_id
+        `;
       }
     } catch (error) {
-      console.error('Error recalculating holdings:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'HoldingRepository.recalculateFromTransactions');
     }
   }
 
-  async recalculateAll(userId: string): Promise<void> {
-    try {
-      const persons = await prisma.person.findMany({
-        where: { userId },
-        select: { id: true },
-      });
-
-      await Promise.all(
-        persons.map((person) => this.recalculateFromTransactions(userId, person.id))
-      );
-    } catch (error) {
-      console.error('Error recalculating all holdings:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
+  /**
+   * Batch update of current prices for every holding owned by `userId` whose
+   * `asset_symbol` matches an entry in the supplied map.
+   */
   async updatePrices(userId: string, prices: Map<string, number>): Promise<number> {
     try {
       if (prices.size === 0) return 0;
@@ -345,7 +345,6 @@ export class HoldingRepository {
         priceValues.push(price);
       }
 
-      // Single query: UPDATE all holdings with computed current_value, profit_loss, profit_loss_percent
       const updatedCount = await prisma.$executeRaw`
         UPDATE holdings AS h SET
           current_price = v.price,
@@ -369,8 +368,7 @@ export class HoldingRepository {
 
       return updatedCount;
     } catch (error) {
-      console.error('Error updating prices:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'HoldingRepository.updatePrices');
     }
   }
 
@@ -379,36 +377,7 @@ export class HoldingRepository {
       const { count } = await prisma.holding.deleteMany({ where: { id, userId } });
       if (count === 0) throw new Error('Holding not found');
     } catch (error) {
-      console.error('Error deleting holding:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async getTotalValue(userId: string): Promise<number> {
-    try {
-      const result = await prisma.holding.aggregate({
-        where: { userId, quantity: { gt: 0 }, currentValue: { not: null } },
-        _sum: { currentValue: true },
-      });
-      return result._sum.currentValue?.toNumber() || 0;
-    } catch (error) {
-      console.error('Error getting total value:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async getByAssetType(userId: string): Promise<Map<AssetType, HoldingWithRelations[]>> {
-    try {
-      const holdings = await this.findAll(userId);
-      const grouped = new Map<AssetType, HoldingWithRelations[]>();
-      for (const holding of holdings) {
-        if (!grouped.has(holding.assetType)) grouped.set(holding.assetType, []);
-        grouped.get(holding.assetType)!.push(holding);
-      }
-      return grouped;
-    } catch (error) {
-      console.error('Error getting holdings by type:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'HoldingRepository.delete');
     }
   }
 
@@ -421,8 +390,7 @@ export class HoldingRepository {
       });
       return holdings.map((h) => ({ symbol: h.assetSymbol, type: h.assetType }));
     } catch (error) {
-      console.error('Error getting unique assets:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'HoldingRepository.getUniqueAssets');
     }
   }
 }

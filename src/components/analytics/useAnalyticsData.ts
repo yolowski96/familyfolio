@@ -1,10 +1,9 @@
 'use client';
 
 import { useMemo } from 'react';
-import {
-  useFilteredTransactions,
-  usePortfolioStore,
-} from '@/store/usePortfolioStore';
+import { useFilteredTransactions } from '@/hooks/useFilteredData';
+import { usePersons } from '@/lib/queries';
+import { useActivePersonId } from '@/store/useUiStore';
 import { usePortfolioWithPrices } from '@/hooks/usePortfolioWithPrices';
 import { AssetHolding, AssetType } from '@/types';
 
@@ -44,8 +43,8 @@ export interface MonthlyVolumeDatum {
 export function useAnalyticsData() {
   const { summary } = usePortfolioWithPrices();
   const transactions = useFilteredTransactions();
-  const persons = usePortfolioStore((state) => state.persons);
-  const activePersonId = usePortfolioStore((state) => state.activePersonId);
+  const { data: persons = [] } = usePersons();
+  const activePersonId = useActivePersonId();
 
   const performanceData = useMemo<PerformanceData>(() => {
     const winners = summary.holdings.filter((h) => h.unrealizedPL > 0);

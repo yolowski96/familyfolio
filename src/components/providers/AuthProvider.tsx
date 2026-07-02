@@ -1,8 +1,8 @@
 'use client';
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { User, SupabaseClient } from '@supabase/supabase-js';
+import type { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
@@ -23,12 +23,11 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const supabaseRef = useRef<SupabaseClient | null>(null);
 
-  if (!supabaseRef.current) {
-    supabaseRef.current = createClient();
-  }
-  const supabase = supabaseRef.current;
+  // `createClient()` returns a stable singleton per browser tab, so
+  // memoizing with an empty dependency array gives us one client per mount
+  // without touching refs during render.
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     // getSession() reads the JWT locally — no network call unless the token needs refreshing.

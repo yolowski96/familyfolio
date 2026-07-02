@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { usePortfolioStore, DbPerson } from '@/store/usePortfolioStore';
+import { usePersons, useTransactions, useAddTransaction } from '@/lib/queries';
+import { useActivePersonId } from '@/store/useUiStore';
+import type { DbPerson } from '@/types/db';
 import { AssetType } from '@/types';
 import type { AssetSearchResult } from '@/types/transactionSearch';
 import { format } from 'date-fns';
@@ -61,11 +63,10 @@ export function useTransactionForm(
   onSuccess?: () => void,
   initialAsset?: InitialAssetData,
 ): UseTransactionFormReturn {
-  const persons = usePortfolioStore((state) => state.persons);
-  const transactions = usePortfolioStore((state) => state.transactions);
-  const activePersonId = usePortfolioStore((state) => state.activePersonId);
-  const addTransactionAction = usePortfolioStore((state) => state.addTransaction);
-  const loadPersons = usePortfolioStore((state) => state.loadPersons);
+  const { data: persons = [] } = usePersons();
+  const { data: transactions = [] } = useTransactions();
+  const activePersonId = useActivePersonId();
+  const { mutateAsync: addTransactionAction } = useAddTransaction();
 
   // Form state
   const [personId, setPersonId] = useState('');
@@ -161,9 +162,6 @@ export function useTransactionForm(
   }, []);
 
   const initializeForm = useCallback(() => {
-    if (persons.length === 0) {
-      loadPersons().catch(console.error);
-    }
     resetForm();
     const selectedPerson = activePersonId !== 'ALL'
       ? activePersonId
@@ -177,7 +175,7 @@ export function useTransactionForm(
     }
 
     isInitialMount.current = true;
-  }, [persons, activePersonId, loadPersons, resetForm, initialAsset]);
+  }, [persons, activePersonId, resetForm, initialAsset]);
 
   // Auto-calculate handlers
   const handlePricePerUnitChange = useCallback((value: string) => {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { holdingRepository } from '@/lib/db/repositories';
-import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { handleApiError } from '@/lib/api/handle-error';
 import { parseJsonBody } from '@/lib/api-utils';
 import { validatePersonOwnership } from '@/lib/api/validate-person';
 import { priceService } from '@/lib/api/price-service';
@@ -24,12 +25,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(holdings);
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('GET /api/holdings error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch holdings' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'GET /api/holdings');
   }
 }
 
@@ -86,11 +82,6 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('POST /api/holdings error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to process holdings action' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'POST /api/holdings');
   }
 }

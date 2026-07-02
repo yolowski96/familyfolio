@@ -1,14 +1,3 @@
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(
-      `Missing required environment variable: ${name}. ` +
-      `See .env.example for the full list of required variables.`
-    );
-  }
-  return value;
-}
-
 function optional(name: string): string | undefined {
   return process.env[name] || undefined;
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { priceService } from '@/lib/api/price-service';
-import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { handleApiError } from '@/lib/api/handle-error';
 import { parseJsonBody } from '@/lib/api-utils';
 import { AssetType } from '@/types';
 
@@ -43,12 +44,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(price);
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('GET /api/prices error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'GET /api/prices');
   }
 }
 
@@ -69,11 +65,6 @@ export async function POST(request: NextRequest) {
     const prices = await priceService.batchGetPrices(assets, convertTo || undefined);
     return NextResponse.json(Object.fromEntries(prices));
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('POST /api/prices error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'POST /api/prices');
   }
 }

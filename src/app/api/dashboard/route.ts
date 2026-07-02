@@ -4,10 +4,11 @@ import {
   holdingRepository,
   personRepository,
 } from '@/lib/db/repositories';
-import { getAuthUserFast, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { getAuthUserFast } from '@/lib/auth';
+import { handleApiError } from '@/lib/api/handle-error';
 import { priceService } from '@/lib/api/price-service';
 import { getUniqueAssetsFromHoldings } from '@/lib/portfolio/summary';
-import type { DbHolding } from '@/store/usePortfolioStore';
+import type { DbHolding } from '@/types/db';
 
 /**
  * Aggregated read endpoint for the dashboard / app shell.
@@ -25,42 +26,76 @@ import type { DbHolding } from '@/store/usePortfolioStore';
  * Defaults to all four when `include` is absent.
  */
 export async function GET(request: NextRequest) {
+  const t0 = performance.now();
+  const timings: Record<string, number> = {};
+  const mark = (label: string, from: number) => {
+    timings[label] = Math.round(performance.now() - from);
+  };
+
   try {
+    const tAuth = performance.now();
     const user = await getAuthUserFast();
+    mark('auth', tAuth);
+
     const { searchParams } = new URL(request.url);
     const includeParam = searchParams.get('include');
+    // Default intentionally excludes `transactions` — they are heavy (often
+    // hundreds of rows) and not needed for the initial dashboard render.
+    // The transactions list fetches itself via `useTransactions` after
+    // bootstrap resolves. Callers that do need the full set must opt-in
+    // explicitly via `?include=...,transactions`.
     const parts = includeParam
       ? includeParam.split(',').map((p) => p.trim()).filter(Boolean)
-      : ['holdings', 'persons', 'transactions', 'prices'];
+      : ['holdings', 'persons', 'prices'];
 
     const wantHoldings = parts.includes('holdings');
     const wantPersons = parts.includes('persons');
     const wantTransactions = parts.includes('transactions');
     const wantPrices = parts.includes('prices');
 
-    // Holdings must resolve first (or at least in parallel) before we can
-    // derive the set of symbols to price. We kick off every request we can
-    // in parallel and only chain `prices` behind `holdings`.
-    const holdingsPromise = wantHoldings || wantPrices
+    const tHoldings = performance.now();
+    const holdingsPromise = (wantHoldings || wantPrices
       ? holdingRepository.findAllLean(user.id)
-      : Promise.resolve(null);
+      : Promise.resolve(null)
+    ).then((v) => {
+      mark('holdings', tHoldings);
+      return v;
+    });
 
-    const personsPromise = wantPersons
+    const tPersons = performance.now();
+    const personsPromise = (wantPersons
       ? personRepository.findAll(user.id)
-      : Promise.resolve(null);
+      : Promise.resolve(null)
+    ).then((v) => {
+      mark('persons', tPersons);
+      return v;
+    });
 
-    const transactionsPromise = wantTransactions
+    const tTx = performance.now();
+    const transactionsPromise = (wantTransactions
       ? transactionRepository.findAllLean(user.id)
-      : Promise.resolve(null);
+      : Promise.resolve(null)
+    ).then((v) => {
+      mark('transactions', tTx);
+      return v;
+    });
 
     const pricesPromise = wantPrices
       ? holdingsPromise.then(async (holdings) => {
-          if (!holdings || holdings.length === 0) return {};
+          const tPrices = performance.now();
+          if (!holdings || holdings.length === 0) {
+            mark('prices', tPrices);
+            return {};
+          }
           const assets = getUniqueAssetsFromHoldings(holdings as unknown as DbHolding[]).map(
             (a) => ({ symbol: a.symbol, assetType: a.assetType })
           );
-          if (assets.length === 0) return {};
+          if (assets.length === 0) {
+            mark('prices', tPrices);
+            return {};
+          }
           const priceMap = await priceService.batchGetPrices(assets, 'EUR');
+          mark('prices', tPrices);
           return Object.fromEntries(priceMap);
         })
       : Promise.resolve(null);
@@ -78,13 +113,11 @@ export async function GET(request: NextRequest) {
     if (wantTransactions && transactions !== null) result.transactions = transactions;
     if (wantPrices && prices !== null) result.prices = prices;
 
+    timings.total = Math.round(performance.now() - t0);
+    console.log('[dashboard] timings (ms)', timings);
+
     return NextResponse.json(result);
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('GET /api/dashboard error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch dashboard data' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'GET /api/dashboard');
   }
 }

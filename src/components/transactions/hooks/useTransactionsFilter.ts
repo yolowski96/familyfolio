@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { subDays, subMonths, isAfter, parseISO } from 'date-fns';
-import { DbTransaction } from '@/store/usePortfolioStore';
+import type { DbTransaction } from '@/types/db';
 import { AssetType } from '@/types';
 
 export type DateRange = 'all' | '7d' | '30d' | '90d' | '1y';

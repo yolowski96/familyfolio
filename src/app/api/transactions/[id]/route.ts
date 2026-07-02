@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/db/prisma';
 import { transactionRepository, holdingRepository } from '@/lib/db/repositories';
-import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { handleApiError } from '@/lib/api/handle-error';
 import { parseJsonBody } from '@/lib/api-utils';
-import { validatePersonOwnership } from '@/lib/api/validate-person';
-import type { AssetType, TransactionType } from '@prisma/client';
+import type { AssetType, Prisma, TransactionType } from '@prisma/client';
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 const VALID_ASSET_TYPES: AssetType[] = ['ETF', 'STOCK', 'CRYPTO'];
 const VALID_TRANSACTION_TYPES: TransactionType[] = ['BUY', 'SELL'];
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getAuthUser();
     const { id } = await params;
@@ -21,12 +22,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
     return NextResponse.json(transaction);
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('GET /api/transactions/[id] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch transaction' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'GET /api/transactions/[id]');
   }
 }
 
@@ -69,46 +65,107 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     if (body.personId) {
-      const personError = await validatePersonOwnership(body.personId as string, user.id);
-      if (personError) return personError;
+      // PersonId changes require ownership check since the inner updateMany
+      // filters on the existing row's userId, not the new person's owner.
+      const count = await prisma.person.count({
+        where: { id: body.personId as string, userId: user.id },
+      });
+      if (count === 0) {
+        return NextResponse.json(
+          { error: 'Target person not found or does not belong to this user' },
+          { status: 404 }
+        );
+      }
     }
 
     if (body.assetSymbol) body.assetSymbol = (body.assetSymbol as string).toUpperCase();
     if (body.currency) body.currency = (body.currency as string).toUpperCase();
 
-    const transaction = await transactionRepository.update(id, user.id, body);
-    await holdingRepository.recalculateFromTransactions(user.id, transaction.personId);
-    return NextResponse.json(transaction);
+    const result = await prisma.$transaction(async (tx) => {
+      if (body.assetSymbol && body.assetName && body.assetType) {
+        await tx.asset.upsert({
+          where: { symbol: body.assetSymbol as string },
+          update: {},
+          create: {
+            symbol: body.assetSymbol as string,
+            name: body.assetName as string,
+            type: body.assetType as AssetType,
+            currency: (body.currency as string) || 'USD',
+            exchange: body.exchange as string | undefined,
+          },
+        });
+      }
+
+      const updateData: Prisma.TransactionUncheckedUpdateInput = {};
+      if (body.assetSymbol !== undefined) updateData.assetSymbol = body.assetSymbol as string;
+      if (body.assetName !== undefined) updateData.assetName = body.assetName as string;
+      if (body.assetType !== undefined) updateData.assetType = body.assetType as AssetType;
+      if (body.type !== undefined) updateData.type = body.type as TransactionType;
+      if (body.quantity !== undefined) updateData.quantity = body.quantity as number;
+      if (body.pricePerUnit !== undefined) updateData.pricePerUnit = body.pricePerUnit as number;
+      if (body.totalAmount !== undefined) updateData.totalAmount = body.totalAmount as number;
+      if (body.currency !== undefined) updateData.currency = body.currency as string;
+      if (body.fee !== undefined) updateData.fee = body.fee as number;
+      if (body.date !== undefined) updateData.date = body.date as Date;
+      if (body.exchange !== undefined) updateData.exchange = body.exchange as string | null;
+      if (body.notes !== undefined) updateData.notes = body.notes as string | null;
+
+      const updated = await tx.transaction.updateMany({
+        where: { id, userId: user.id },
+        data: updateData,
+      });
+      if (updated.count === 0) return null;
+
+      const transaction = await tx.transaction.findFirst({
+        where: { id, userId: user.id },
+        include: {
+          person: { select: { id: true, name: true, color: true } },
+          asset: { select: { symbol: true, name: true, type: true } },
+        },
+      });
+      if (!transaction) return null;
+
+      await holdingRepository.recalculateFromTransactions(
+        user.id,
+        transaction.personId,
+        tx
+      );
+
+      return transaction;
+    });
+
+    if (!result) {
+      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    }
+    return NextResponse.json(result);
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('PATCH /api/transactions/[id] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update transaction' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'PATCH /api/transactions/[id]');
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getAuthUser();
     const { id } = await params;
 
-    // Use fast delete that returns personId without fetching relations
-    const personId = await transactionRepository.deleteFast(id, user.id);
+    const personId = await prisma.$transaction(async (tx) => {
+      const result = await tx.$queryRaw<{ person_id: string }[]>`
+        DELETE FROM transactions
+        WHERE id = ${id} AND user_id = ${user.id}
+        RETURNING person_id
+      `;
+      if (result.length === 0) return null;
+
+      const pid = result[0].person_id;
+      await holdingRepository.recalculateFromTransactions(user.id, pid, tx);
+      return pid;
+    });
+
     if (!personId) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
     }
-
-    await holdingRepository.recalculateFromTransactions(user.id, personId);
-
     return NextResponse.json({ success: true, message: 'Transaction deleted successfully' });
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('DELETE /api/transactions/[id] error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete transaction' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'DELETE /api/transactions/[id]');
   }
 }

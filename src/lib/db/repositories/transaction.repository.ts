@@ -1,6 +1,6 @@
-import { prisma, handlePrismaError } from '../prisma';
+import { prisma } from '../prisma';
+import { rethrowDbError } from '@/lib/api/handle-error';
 import type { Transaction, Prisma, AssetType, TransactionType } from '@prisma/client';
-import { Decimal } from '@prisma/client/runtime/library';
 
 export type CreateTransactionInput = {
   personId: string;
@@ -27,25 +27,22 @@ export type TransactionFilters = {
   type?: TransactionType;
   dateFrom?: Date;
   dateTo?: Date;
+  limit?: number;
+  cursor?: string;
 };
 
 export type TransactionWithRelations = Transaction & {
-  person: {
-    id: string;
-    name: string;
-    color: string;
-  };
-  asset: {
-    symbol: string;
-    name: string;
-    type: AssetType;
-  };
+  person: { id: string; name: string; color: string };
+  asset: { symbol: string; name: string; type: AssetType };
 };
 
 const includeRelations = {
   person: { select: { id: true, name: true, color: true } },
   asset: { select: { symbol: true, name: true, type: true } },
-};
+} satisfies Prisma.TransactionInclude;
+
+const DEFAULT_PAGE_SIZE = 500;
+const MAX_PAGE_SIZE = 2000;
 
 export class TransactionRepository {
   async findAll(userId: string, filters?: TransactionFilters): Promise<TransactionWithRelations[]> {
@@ -63,21 +60,39 @@ export class TransactionRepository {
         if (filters.dateTo) where.date.lte = filters.dateTo;
       }
 
+      const take = Math.min(filters?.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
       return await prisma.transaction.findMany({
         where,
         include: includeRelations,
-        orderBy: { date: 'desc' },
+        orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        take,
+        ...(filters?.cursor
+          ? { cursor: { id: filters.cursor }, skip: 1 }
+          : {}),
       });
     } catch (error) {
-      console.error('Error fetching transactions:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'TransactionRepository.findAll');
     }
   }
 
-  async findAllLean(userId: string) {
+  async findAllLean(userId: string, filters?: TransactionFilters) {
     try {
+      const where: Prisma.TransactionWhereInput = { userId };
+      if (filters?.personId) where.personId = filters.personId;
+      if (filters?.assetSymbol) where.assetSymbol = filters.assetSymbol;
+      if (filters?.assetType) where.assetType = filters.assetType;
+      if (filters?.type) where.type = filters.type;
+      if (filters?.dateFrom || filters?.dateTo) {
+        where.date = {};
+        if (filters.dateFrom) where.date.gte = filters.dateFrom;
+        if (filters.dateTo) where.date.lte = filters.dateTo;
+      }
+
+      const take = Math.min(filters?.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
       return await prisma.transaction.findMany({
-        where: { userId },
+        where,
         select: {
           id: true,
           personId: true,
@@ -94,11 +109,14 @@ export class TransactionRepository {
           exchange: true,
           notes: true,
         },
-        orderBy: { date: 'desc' },
+        orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        take,
+        ...(filters?.cursor
+          ? { cursor: { id: filters.cursor }, skip: 1 }
+          : {}),
       });
     } catch (error) {
-      console.error('Error fetching transactions (lean):', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'TransactionRepository.findAllLean');
     }
   }
 
@@ -109,115 +127,119 @@ export class TransactionRepository {
         include: includeRelations,
       });
     } catch (error) {
-      console.error('Error fetching transaction:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async create(userId: string, data: CreateTransactionInput): Promise<TransactionWithRelations> {
-    try {
-      // Use raw SQL for maximum performance - single query for both asset upsert and transaction insert
-      const transactionId = crypto.randomUUID();
-      const now = new Date();
-
-      await prisma.$executeRaw`
-        WITH asset_upsert AS (
-          INSERT INTO assets (symbol, name, type, currency, exchange, created_at, updated_at)
-          VALUES (${data.assetSymbol}, ${data.assetName}, ${data.assetType}::"AssetType", ${data.currency}, ${data.exchange || null}, ${now}, ${now})
-          ON CONFLICT (symbol) DO UPDATE SET name = EXCLUDED.name, exchange = EXCLUDED.exchange, updated_at = ${now}
-        )
-        INSERT INTO transactions (id, user_id, person_id, asset_symbol, asset_name, asset_type, type, quantity, price_per_unit, total_amount, currency, fee, date, exchange, notes, created_at, updated_at)
-        VALUES (${transactionId}, ${userId}, ${data.personId}, ${data.assetSymbol}, ${data.assetName}, ${data.assetType}::"AssetType", ${data.type}::"TransactionType", ${data.quantity}, ${data.pricePerUnit}, ${data.totalAmount}, ${data.currency}, ${data.fee || 0}, ${new Date(data.date)}, ${data.exchange || null}, ${data.notes || null}, ${now}, ${now})
-      `;
-
-      // Return a constructed response instead of fetching - frontend has all the info
-      return {
-        id: transactionId,
-        userId,
-        personId: data.personId,
-        assetSymbol: data.assetSymbol,
-        assetName: data.assetName,
-        assetType: data.assetType,
-        type: data.type,
-        quantity: new Decimal(data.quantity),
-        pricePerUnit: new Decimal(data.pricePerUnit),
-        totalAmount: new Decimal(data.totalAmount),
-        currency: data.currency,
-        fee: new Decimal(data.fee || 0),
-        date: new Date(data.date),
-        exchange: data.exchange || null,
-        notes: data.notes || null,
-        createdAt: now,
-        updatedAt: now,
-        person: { id: data.personId, name: '', color: '' }, // Placeholder - not used by frontend
-        asset: { symbol: data.assetSymbol, name: data.assetName, type: data.assetType },
-      } as TransactionWithRelations;
-    } catch (error) {
-      console.error('Error creating transaction:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async update(id: string, userId: string, data: UpdateTransactionInput): Promise<TransactionWithRelations> {
-    try {
-      if (data.assetSymbol && data.assetName && data.assetType) {
-        await prisma.asset.upsert({
-          where: { symbol: data.assetSymbol },
-          update: { name: data.assetName, exchange: data.exchange },
-          create: {
-            symbol: data.assetSymbol,
-            name: data.assetName,
-            type: data.assetType,
-            currency: data.currency || 'USD',
-            exchange: data.exchange,
-          },
-        });
-      }
-
-      const updateData: Prisma.TransactionUncheckedUpdateInput = {};
-      if (data.assetSymbol !== undefined) updateData.assetSymbol = data.assetSymbol;
-      if (data.assetName !== undefined) updateData.assetName = data.assetName;
-      if (data.assetType !== undefined) updateData.assetType = data.assetType;
-      if (data.type !== undefined) updateData.type = data.type;
-      if (data.quantity !== undefined) updateData.quantity = data.quantity;
-      if (data.pricePerUnit !== undefined) updateData.pricePerUnit = data.pricePerUnit;
-      if (data.totalAmount !== undefined) updateData.totalAmount = data.totalAmount;
-      if (data.currency !== undefined) updateData.currency = data.currency;
-      if (data.fee !== undefined) updateData.fee = data.fee;
-      if (data.date !== undefined) updateData.date = new Date(data.date);
-      if (data.exchange !== undefined) updateData.exchange = data.exchange;
-      if (data.notes !== undefined) updateData.notes = data.notes;
-
-      const result = await prisma.transaction.updateMany({
-        where: { id, userId },
-        data: updateData,
-      });
-      if (result.count === 0) throw new Error('Transaction not found');
-
-      return await prisma.transaction.findFirst({
-        where: { id },
-        include: includeRelations,
-      }) as TransactionWithRelations;
-    } catch (error) {
-      console.error('Error updating transaction:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async delete(id: string, userId: string): Promise<void> {
-    try {
-      const { count } = await prisma.transaction.deleteMany({ where: { id, userId } });
-      if (count === 0) throw new Error('Transaction not found');
-    } catch (error) {
-      console.error('Error deleting transaction:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'TransactionRepository.findById');
     }
   }
 
   /**
-   * Fast delete that returns personId in a single query
+   * Create a transaction. Wraps the asset upsert + transaction insert in a
+   * single interactive transaction so either both succeed or neither does.
+   *
+   * Does NOT update the `Asset.name` on conflict — the assets table is shared
+   * across users, so we preserve whatever name already exists. Names should
+   * be refreshed from a trusted source (e.g. price providers), not from
+   * user-submitted form data.
    */
-  async deleteFast(id: string, userId: string): Promise<string | null> {
+  async create(userId: string, data: CreateTransactionInput): Promise<TransactionWithRelations> {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.asset.upsert({
+          where: { symbol: data.assetSymbol },
+          update: {},
+          create: {
+            symbol: data.assetSymbol,
+            name: data.assetName,
+            type: data.assetType,
+            currency: data.currency,
+            exchange: data.exchange,
+          },
+        });
+
+        return await tx.transaction.create({
+          data: {
+            userId,
+            personId: data.personId,
+            assetSymbol: data.assetSymbol,
+            assetName: data.assetName,
+            assetType: data.assetType,
+            type: data.type,
+            quantity: data.quantity,
+            pricePerUnit: data.pricePerUnit,
+            totalAmount: data.totalAmount,
+            currency: data.currency,
+            fee: data.fee ?? 0,
+            date: new Date(data.date),
+            exchange: data.exchange,
+            notes: data.notes,
+          },
+          include: includeRelations,
+        });
+      });
+    } catch (error) {
+      rethrowDbError(error, 'TransactionRepository.create');
+    }
+  }
+
+  async update(
+    id: string,
+    userId: string,
+    data: UpdateTransactionInput
+  ): Promise<TransactionWithRelations> {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        if (data.assetSymbol && data.assetName && data.assetType) {
+          await tx.asset.upsert({
+            where: { symbol: data.assetSymbol },
+            update: {},
+            create: {
+              symbol: data.assetSymbol,
+              name: data.assetName,
+              type: data.assetType,
+              currency: data.currency || 'USD',
+              exchange: data.exchange,
+            },
+          });
+        }
+
+        const updateData: Prisma.TransactionUncheckedUpdateInput = {};
+        if (data.assetSymbol !== undefined) updateData.assetSymbol = data.assetSymbol;
+        if (data.assetName !== undefined) updateData.assetName = data.assetName;
+        if (data.assetType !== undefined) updateData.assetType = data.assetType;
+        if (data.type !== undefined) updateData.type = data.type;
+        if (data.quantity !== undefined) updateData.quantity = data.quantity;
+        if (data.pricePerUnit !== undefined) updateData.pricePerUnit = data.pricePerUnit;
+        if (data.totalAmount !== undefined) updateData.totalAmount = data.totalAmount;
+        if (data.currency !== undefined) updateData.currency = data.currency;
+        if (data.fee !== undefined) updateData.fee = data.fee;
+        if (data.date !== undefined) updateData.date = new Date(data.date);
+        if (data.exchange !== undefined) updateData.exchange = data.exchange;
+        if (data.notes !== undefined) updateData.notes = data.notes;
+
+        const result = await tx.transaction.updateMany({
+          where: { id, userId },
+          data: updateData,
+        });
+        if (result.count === 0) {
+          throw new Error('Transaction not found');
+        }
+
+        const updated = await tx.transaction.findFirst({
+          where: { id, userId },
+          include: includeRelations,
+        });
+        if (!updated) throw new Error('Transaction not found');
+        return updated;
+      });
+    } catch (error) {
+      rethrowDbError(error, 'TransactionRepository.update');
+    }
+  }
+
+  /**
+   * Delete a transaction and return its `personId` in a single round-trip so
+   * callers can recalculate holdings without an extra SELECT.
+   */
+  async deleteAndReturnPersonId(id: string, userId: string): Promise<string | null> {
     try {
       const result = await prisma.$queryRaw<{ person_id: string }[]>`
         DELETE FROM transactions 
@@ -226,44 +248,9 @@ export class TransactionRepository {
       `;
       return result.length > 0 ? result[0].person_id : null;
     } catch (error) {
-      console.error('Error deleting transaction:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'TransactionRepository.deleteAndReturnPersonId');
     }
   }
-
-  async findByPersonId(userId: string, personId: string): Promise<TransactionWithRelations[]> {
-    return this.findAll(userId, { personId });
-  }
-
-  async findByAssetSymbol(userId: string, assetSymbol: string): Promise<TransactionWithRelations[]> {
-    return this.findAll(userId, { assetSymbol });
-  }
-
-  async countByPersonId(userId: string, personId: string): Promise<number> {
-    try {
-      return await prisma.transaction.count({
-        where: { userId, personId },
-      });
-    } catch (error) {
-      console.error('Error counting transactions:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async findRecent(userId: string, limit: number = 10): Promise<TransactionWithRelations[]> {
-    try {
-      return await prisma.transaction.findMany({
-        where: { userId },
-        include: includeRelations,
-        orderBy: { date: 'desc' },
-        take: limit,
-      });
-    } catch (error) {
-      console.error('Error fetching recent transactions:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
 }
 
 export const transactionRepository = new TransactionRepository();

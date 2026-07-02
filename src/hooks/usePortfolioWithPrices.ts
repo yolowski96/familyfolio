@@ -1,58 +1,42 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
-import { usePortfolioStore } from '@/store/usePortfolioStore';
+import { useMemo } from 'react';
+import { useHoldings, useLivePrices } from '@/lib/queries';
+import { useActivePersonId } from '@/store/useUiStore';
 import { calculateSummaryFromHoldings } from '@/lib/portfolio/summary';
-
-const PRICE_TTL_MS = 5 * 60 * 1000;
+import type { AssetType } from '@/types';
 
 /**
- * Hook to get the portfolio summary with live prices.
+ * Portfolio summary derived from `/api/holdings` + live prices.
  *
- * Source of truth is `usePortfolioStore.livePrices`, which is:
- *   - seeded in the same round-trip as holdings/persons/transactions by
- *     `loadAll` hitting `/api/dashboard`, so first render already has prices
- *     and we don't pay a client-side waterfall; and
- *   - refreshed every 5 minutes (and when the set of held symbols changes)
- *     via `refreshLivePrices`.
- *
- * Previously this hook owned its own React Query that fired a separate
- * `/api/prices` request after holdings arrived. That produced a visible
- * "€0 everywhere for ~8 seconds" window on cold loads.
+ * Holdings come from `useHoldings` (seeded on mount by the bootstrap
+ * request). Live prices come from `useLivePrices`, keyed on the unique set
+ * of asset symbols currently held, and auto-refetched every 5 minutes.
  */
 export function usePortfolioWithPrices() {
-  const holdings = usePortfolioStore((state) => state.holdings);
-  const activePersonId = usePortfolioStore((state) => state.activePersonId);
-  const livePrices = usePortfolioStore((state) => state.livePrices);
-  const livePricesUpdatedAt = usePortfolioStore((state) => state.livePricesUpdatedAt);
-  const refreshLivePrices = usePortfolioStore((state) => state.refreshLivePrices);
+  const { data: holdings = [], isLoading: holdingsLoading } = useHoldings();
+  const activePersonId = useActivePersonId();
 
-  // Stable key for the unique set of held symbols. A new symbol appearing
-  // (e.g. after a buy of a new asset) forces us to refetch so we cover it;
-  // reordering or duplicate references don't.
-  const symbolKey = useMemo(() => {
-    const seen = new Set<string>();
-    for (const h of holdings) seen.add(h.assetSymbol);
-    return Array.from(seen).sort().join(',');
+  const uniqueAssets = useMemo(() => {
+    const seen = new Map<string, { symbol: string; assetType: AssetType }>();
+    for (const h of holdings) {
+      if (!seen.has(h.assetSymbol)) {
+        seen.set(h.assetSymbol, {
+          symbol: h.assetSymbol,
+          assetType: h.assetType,
+        });
+      }
+    }
+    return Array.from(seen.values());
   }, [holdings]);
 
-  useEffect(() => {
-    if (!symbolKey) return;
-
-    const symbols = symbolKey.split(',');
-    const isStale =
-      !livePricesUpdatedAt || Date.now() - livePricesUpdatedAt > PRICE_TTL_MS;
-    const missingSymbol = symbols.some((s) => !livePrices[s]);
-
-    if (isStale || missingSymbol) {
-      refreshLivePrices();
-    }
-
-    const interval = setInterval(() => {
-      refreshLivePrices();
-    }, PRICE_TTL_MS);
-    return () => clearInterval(interval);
-  }, [symbolKey, livePricesUpdatedAt, livePrices, refreshLivePrices]);
+  const {
+    data: livePrices = {},
+    isLoading: pricesLoading,
+    isError,
+    refetch,
+    dataUpdatedAt,
+  } = useLivePrices(uniqueAssets, { convertTo: 'EUR' });
 
   const summary = useMemo(
     () => calculateSummaryFromHoldings(holdings, activePersonId, livePrices),
@@ -60,19 +44,15 @@ export function usePortfolioWithPrices() {
   );
 
   const lastUpdated = useMemo(
-    () => (livePricesUpdatedAt ? new Date(livePricesUpdatedAt) : null),
-    [livePricesUpdatedAt]
+    () => (dataUpdatedAt ? new Date(dataUpdatedAt) : null),
+    [dataUpdatedAt]
   );
-
-  // Consumers treat "no data yet" as loading. Once we've seen a successful
-  // refresh (or an empty-holdings no-op), livePricesUpdatedAt is set.
-  const isLoading = holdings.length > 0 && livePricesUpdatedAt === null;
 
   return {
     summary,
-    isLoading,
-    isError: false,
-    refetch: refreshLivePrices,
+    isLoading: holdingsLoading || (holdings.length > 0 && pricesLoading),
+    isError,
+    refetch,
     lastUpdated,
     livePrices,
   };

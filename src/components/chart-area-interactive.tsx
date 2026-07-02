@@ -26,12 +26,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import {
-  useFilteredTransactions,
-  usePortfolioStore,
-} from '@/store/usePortfolioStore';
-import { usePortfolioWithPrices } from '@/hooks/usePortfolioWithPrices';
-import { buildPortfolioHistory } from '@/lib/portfolio/history';
+import { usePersons, usePortfolioHistory } from '@/lib/queries';
+import { useActivePersonId } from '@/store/useUiStore';
 
 const chartConfig = {
   value: {
@@ -53,12 +49,8 @@ type TimeRangeKey = keyof typeof TIME_RANGES;
 export function ChartAreaInteractive() {
   const isMobile = useIsMobile();
   const [timeRange, setTimeRange] = React.useState<TimeRangeKey>('1m');
-  const { summary, livePrices } = usePortfolioWithPrices();
-  const persons = usePortfolioStore((state) => state.persons);
-  const activePersonId = usePortfolioStore((state) => state.activePersonId);
-  const isInitialized = usePortfolioStore((state) => state.isInitialized);
-  const storeLoading = usePortfolioStore((state) => state.isLoading);
-  const transactions = useFilteredTransactions();
+  const { data: persons = [] } = usePersons();
+  const activePersonId = useActivePersonId();
 
   React.useEffect(() => {
     if (isMobile) setTimeRange('1w');
@@ -66,10 +58,13 @@ export function ChartAreaInteractive() {
 
   const days = TIME_RANGES[timeRange].days;
 
-  const chartData = React.useMemo(() => {
-    if (transactions.length === 0 || summary.totalBalance === 0) return [];
-    return buildPortfolioHistory(transactions, livePrices, days);
-  }, [transactions, livePrices, days, summary.totalBalance]);
+  // Server-computed `{ date, value }[]` series. Replaces the former flow
+  // which downloaded every transaction just to replay them client-side.
+  // Cached per (days, personId) so switching ranges is instant on return.
+  const { data: chartData = [], isPending: isLoading } = usePortfolioHistory(
+    days,
+    activePersonId === 'ALL' ? undefined : activePersonId
+  );
 
   const viewName =
     activePersonId === 'ALL'
@@ -78,7 +73,7 @@ export function ChartAreaInteractive() {
 
   const periodLabel = TIME_RANGES[timeRange].label;
 
-  if (!isInitialized || storeLoading) {
+  if (isLoading) {
     return (
       <Card className="@container/card">
         <CardHeader>

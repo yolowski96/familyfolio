@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { priceService } from '@/lib/api/price-service';
-import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { handleApiError } from '@/lib/api/handle-error';
 import { parseJsonBody } from '@/lib/api-utils';
 import { AssetType } from '@/types';
 
@@ -26,11 +27,6 @@ export async function POST(request: NextRequest) {
     const results = await priceService.search(query, assetType);
     return NextResponse.json(results);
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('POST /api/prices/search error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'POST /api/prices/search');
   }
 }

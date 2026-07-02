@@ -46,7 +46,7 @@ import { usePrivacy } from '@/components/providers/PrivacyProvider';
 import { formatCurrency, formatQuantity } from '@/lib/utils';
 import { AssetTypeIcon, TYPE_COLORS } from '@/lib/assetTypeDisplay';
 import { usePersonName } from '@/hooks/usePersonName';
-import { DbTransaction } from '@/store/usePortfolioStore';
+import type { DbTransaction } from '@/types/db';
 
 interface TransactionsTableProps {
   transactions: DbTransaction[];
@@ -206,6 +206,7 @@ export function TransactionsTable({
     return baseColumns;
   }, [showPersonColumn, getPersonName, onDeleteTransaction]);
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is compatible but React Compiler cannot verify it
   const table = useReactTable({
     data: transactions,
     columns,

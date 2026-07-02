@@ -5,7 +5,8 @@ import { IconPlus } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/utils';
 import { usePrivacy } from '@/components/providers/PrivacyProvider';
-import { usePortfolioStore } from '@/store/usePortfolioStore';
+import { useHoldings, usePersons } from '@/lib/queries';
+import { useActivePersonId } from '@/store/useUiStore';
 import { usePortfolioWithPrices } from '@/hooks/usePortfolioWithPrices';
 import { AssetHolding } from '@/types';
 import { AddTransactionDialog } from '@/components/transactions/AddTransactionDialog';
@@ -22,10 +23,9 @@ import { useHoldingsFilter } from './hooks/useHoldingsFilter';
 export function HoldingsView() {
   usePrivacy();
   const { summary } = usePortfolioWithPrices();
-  const persons = usePortfolioStore((state) => state.persons);
-  const activePersonId = usePortfolioStore((state) => state.activePersonId);
-  const isInitialized = usePortfolioStore((state) => state.isInitialized);
-  const storeLoading = usePortfolioStore((state) => state.isLoading);
+  const { data: persons = [] } = usePersons();
+  const activePersonId = useActivePersonId();
+  const { isPending: isLoading } = useHoldings();
 
   const [viewMode, setViewMode] = React.useState<'grid' | 'list'>('grid');
   const [selectedAsset, setSelectedAsset] = React.useState<AssetHolding | null>(null);
@@ -48,7 +48,7 @@ export function HoldingsView() {
 
   const hasFilters = filter.searchQuery !== '' || filter.typeFilter !== 'ALL';
 
-  if (!isInitialized || storeLoading) {
+  if (isLoading) {
     return <HoldingsSkeleton />;
   }
 

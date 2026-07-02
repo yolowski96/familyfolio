@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { AssetType } from '@/types';
-import { DbPerson } from '@/store/usePortfolioStore';
+import type { DbPerson } from '@/types/db';
 import { DateRange, TransactionTypeFilter } from './hooks/useTransactionsFilter';
 
 interface TransactionsToolbarProps {

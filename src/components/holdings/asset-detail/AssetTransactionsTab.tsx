@@ -15,7 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency, formatQuantity } from '@/lib/utils';
 import { usePersonName } from '@/hooks/usePersonName';
-import { usePortfolioStore, DbTransaction } from '@/store/usePortfolioStore';
+import { useActivePersonId } from '@/store/useUiStore';
+import type { DbTransaction } from '@/types/db';
 import { AssetHolding } from '@/types';
 import { AddTransactionDialog } from '@/components/transactions/AddTransactionDialog';
 
@@ -36,7 +37,7 @@ export function AssetTransactionsTab({
   onPageChange,
   onEditTransaction,
 }: AssetTransactionsTabProps) {
-  const activePersonId = usePortfolioStore((s) => s.activePersonId);
+  const activePersonId = useActivePersonId();
   const getPersonName = usePersonName();
 
   return (

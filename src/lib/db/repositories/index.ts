@@ -4,6 +4,7 @@ export type {
   CreatePersonInput,
   UpdatePersonInput,
   PersonWithHoldings,
+  SafePerson,
 } from './person.repository';
 
 export { transactionRepository, TransactionRepository } from './transaction.repository';

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { personRepository } from '@/lib/db/repositories';
-import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { handleApiError } from '@/lib/api/handle-error';
 import { parseJsonBody } from '@/lib/api-utils';
 
 export async function GET() {
@@ -9,12 +10,7 @@ export async function GET() {
     const persons = await personRepository.findAll(user.id);
     return NextResponse.json(persons);
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('GET /api/persons error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch persons' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'GET /api/persons');
   }
 }
 
@@ -43,11 +39,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(person, { status: 201 });
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('POST /api/persons error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create person' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'POST /api/persons');
   }
 }

@@ -1,4 +1,4 @@
-import { DbHolding } from '@/store/usePortfolioStore';
+import type { DbHolding } from '@/types/db';
 import { AssetHolding, AssetType, PortfolioSummary, PriceData } from '@/types';
 
 type PriceMap = Record<string, PriceData>;

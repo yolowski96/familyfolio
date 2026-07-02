@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exchangeRateProvider } from '@/lib/api/providers/exchange-rate';
-import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { handleApiError } from '@/lib/api/handle-error';
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,11 +53,6 @@ export async function GET(request: NextRequest) {
       expiresIn: cacheInfo.expiresIn,
     });
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('Exchange rate API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'GET /api/exchange-rate');
   }
 }

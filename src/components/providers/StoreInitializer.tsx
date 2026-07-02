@@ -1,38 +1,34 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { usePortfolioStore } from '@/store/usePortfolioStore';
+import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useBootstrap } from '@/lib/queries/bootstrap';
 
+/**
+ * Reacts to auth state changes:
+ *   - When a user signs in, kicks off the bootstrap query which seeds the
+ *     TanStack cache for persons/transactions/holdings/live-prices in one
+ *     round-trip.
+ *   - When a user signs out, clears the query cache so no stale data from
+ *     the previous session leaks into a new one.
+ */
 export function StoreInitializer({ children }: { children: React.ReactNode }) {
-  const loadAll = usePortfolioStore((state) => state.loadAll);
-  const resetStore = usePortfolioStore((state) => state.resetStore);
   const { user, isLoading: authLoading } = useAuth();
-  const [mounted, setMounted] = useState(false);
-  const didInit = useRef(false);
+  const queryClient = useQueryClient();
   const prevUserId = useRef<string | null>(null);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useBootstrap(Boolean(user) && !authLoading);
 
   useEffect(() => {
-    if (!mounted || authLoading) return;
-
+    if (authLoading) return;
     const currentUserId = user?.id ?? null;
 
-    if (currentUserId && currentUserId !== prevUserId.current) {
-      didInit.current = true;
-      prevUserId.current = currentUserId;
-      loadAll().catch(console.error);
-    }
-
     if (!currentUserId && prevUserId.current) {
-      prevUserId.current = null;
-      didInit.current = false;
-      resetStore();
+      queryClient.clear();
     }
-  }, [mounted, authLoading, user, loadAll, resetStore]);
+    prevUserId.current = currentUserId;
+  }, [user, authLoading, queryClient]);
 
   return <>{children}</>;
 }

@@ -1,4 +1,5 @@
-import { prisma, handlePrismaError } from '../prisma';
+import { prisma } from '../prisma';
+import { rethrowDbError } from '@/lib/api/handle-error';
 import type { Person, Prisma } from '@prisma/client';
 
 export type CreatePersonInput = {
@@ -7,7 +8,29 @@ export type CreatePersonInput = {
   isDefault?: boolean;
 };
 
-export type UpdatePersonInput = Partial<CreatePersonInput>;
+export type UpdatePersonInput = Partial<CreatePersonInput> & {
+  // Set together (paste new external key) or both null (remove key).
+  apiKeyHash?: string | null;
+  apiKeyPrefix?: string | null;
+};
+
+/**
+ * Person shape returned to clients: everything except `apiKeyHash`. The hash
+ * never leaves the server — external keys may be low-entropy, so exposing
+ * even the hash would invite offline brute-forcing.
+ */
+export type SafePerson = Omit<Person, 'apiKeyHash'>;
+
+const safePersonSelect = {
+  id: true,
+  userId: true,
+  name: true,
+  color: true,
+  isDefault: true,
+  apiKeyPrefix: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.PersonSelect;
 
 export type PersonWithHoldings = Person & {
   holdings: Array<{
@@ -32,30 +55,42 @@ export type PersonWithHoldings = Person & {
 };
 
 export class PersonRepository {
-  async findAll(userId: string): Promise<Person[]> {
+  async findAll(userId: string): Promise<SafePerson[]> {
     try {
       return await prisma.person.findMany({
         where: { userId },
+        select: safePersonSelect,
         orderBy: { createdAt: 'asc' },
       });
     } catch (error) {
-      console.error('Error fetching persons:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'PersonRepository.findAll');
     }
   }
 
-  async findById(id: string, userId: string): Promise<Person | null> {
+  async findById(id: string, userId: string): Promise<SafePerson | null> {
     try {
       return await prisma.person.findFirst({
         where: { id, userId },
+        select: safePersonSelect,
       });
     } catch (error) {
-      console.error('Error fetching person:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'PersonRepository.findById');
     }
   }
 
-  async create(userId: string, data: CreatePersonInput): Promise<Person> {
+  /**
+   * Server-side only (external API auth) — resolves a hashed bearer key to
+   * the person it grants access to. Never expose the result directly.
+   */
+  async findByApiKeyHash(apiKeyHash: string): Promise<Person | null> {
+    try {
+      return await prisma.person.findUnique({ where: { apiKeyHash } });
+    } catch (error) {
+      rethrowDbError(error, 'PersonRepository.findByApiKeyHash');
+    }
+  }
+
+  async create(userId: string, data: CreatePersonInput): Promise<SafePerson> {
     try {
       if (data.isDefault) {
         const [, person] = await prisma.$transaction([
@@ -65,6 +100,7 @@ export class PersonRepository {
           }),
           prisma.person.create({
             data: { ...data, userId },
+            select: safePersonSelect,
           }),
         ]);
         return person;
@@ -72,121 +108,51 @@ export class PersonRepository {
 
       return await prisma.person.create({
         data: { ...data, userId },
+        select: safePersonSelect,
       });
     } catch (error) {
-      console.error('Error creating person:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'PersonRepository.create');
     }
   }
 
-  async update(id: string, userId: string, data: UpdatePersonInput): Promise<Person> {
+  /**
+   * Update a person using a single `UPDATE ... RETURNING` + optional
+   * demote-others-to-non-default in one interactive transaction. Returns null
+   * when the row does not belong to `userId` so callers can map to 404.
+   */
+  async update(
+    id: string,
+    userId: string,
+    data: UpdatePersonInput
+  ): Promise<SafePerson | null> {
     try {
-      const ops: Prisma.PrismaPromise<unknown>[] = [];
-
-      if (data.isDefault) {
-        ops.push(
-          prisma.person.updateMany({
+      return await prisma.$transaction(async (tx) => {
+        if (data.isDefault) {
+          await tx.person.updateMany({
             where: { userId, isDefault: true, id: { not: id } },
             data: { isDefault: false },
-          })
-        );
-      }
+          });
+        }
 
-      ops.push(
-        prisma.person.updateMany({
+        const result = await tx.person.updateMany({
           where: { id, userId },
           data,
-        })
-      );
+        });
+        if (result.count === 0) return null;
 
-      const results = await prisma.$transaction(ops);
-      const updateResult = results[results.length - 1] as { count: number };
-      if (updateResult.count === 0) throw new Error('Person not found');
-
-      return await prisma.person.findUniqueOrThrow({ where: { id } });
+        return tx.person.findUnique({ where: { id }, select: safePersonSelect });
+      });
     } catch (error) {
-      console.error('Error updating person:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'PersonRepository.update');
     }
   }
 
-  async delete(id: string, userId: string): Promise<void> {
+  async delete(id: string, userId: string): Promise<boolean> {
     try {
       const { count } = await prisma.person.deleteMany({ where: { id, userId } });
-      if (count === 0) throw new Error('Person not found');
+      return count > 0;
     } catch (error) {
-      console.error('Error deleting person:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async findWithHoldings(id: string, userId: string): Promise<PersonWithHoldings | null> {
-    try {
-      return await prisma.person.findFirst({
-        where: { id, userId },
-        include: {
-          holdings: {
-            include: { asset: true },
-            where: { quantity: { gt: 0 } },
-            orderBy: { currentValue: 'desc' },
-          },
-        },
-      });
-    } catch (error) {
-      console.error('Error fetching person with holdings:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async findAllWithHoldings(userId: string): Promise<PersonWithHoldings[]> {
-    try {
-      return await prisma.person.findMany({
-        where: { userId },
-        include: {
-          holdings: {
-            include: { asset: true },
-            where: { quantity: { gt: 0 } },
-            orderBy: { currentValue: 'desc' },
-          },
-        },
-        orderBy: { createdAt: 'asc' },
-      });
-    } catch (error) {
-      console.error('Error fetching persons with holdings:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async setDefault(id: string, userId: string): Promise<Person> {
-    try {
-      const [, setResult] = await prisma.$transaction([
-        prisma.person.updateMany({
-          where: { userId, isDefault: true },
-          data: { isDefault: false },
-        }),
-        prisma.person.updateMany({
-          where: { id, userId },
-          data: { isDefault: true },
-        }),
-      ]);
-
-      if (setResult.count === 0) throw new Error('Person not found');
-
-      return await prisma.person.findUniqueOrThrow({ where: { id } });
-    } catch (error) {
-      console.error('Error setting default person:', error);
-      throw new Error(handlePrismaError(error));
-    }
-  }
-
-  async findDefault(userId: string): Promise<Person | null> {
-    try {
-      return await prisma.person.findFirst({
-        where: { userId, isDefault: true },
-      });
-    } catch (error) {
-      console.error('Error fetching default person:', error);
-      throw new Error(handlePrismaError(error));
+      rethrowDbError(error, 'PersonRepository.delete');
     }
   }
 }

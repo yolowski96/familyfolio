@@ -149,6 +149,7 @@ export function HoldingsTable({ holdings, onAssetClick }: HoldingsTableProps) {
     [onAssetClick]
   );
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is compatible but React Compiler cannot verify it
   const table = useReactTable({
     data: holdings,
     columns,

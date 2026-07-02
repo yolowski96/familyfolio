@@ -1,12 +1,26 @@
-import { DbTransaction } from '@/store/usePortfolioStore';
-import { PriceData } from '@/types';
-
 export interface PortfolioHistoryPoint {
   date: string;
   value: number;
 }
 
-type PriceMap = Record<string, PriceData>;
+/**
+ * Minimal transaction shape required to replay portfolio value over time.
+ * The server selects only these columns from Prisma — everything else on
+ * `DbTransaction` (notes, exchange, totalAmount, fee, etc.) is irrelevant
+ * to the history computation.
+ */
+export interface HistoryTransaction {
+  assetSymbol: string;
+  type: 'BUY' | 'SELL';
+  quantity: number | string;
+  date: string | Date;
+}
+
+/**
+ * Minimal price shape consumed by the history builder. Matches the subset
+ * of `PriceData` that the algorithm actually reads.
+ */
+export type HistoryPriceMap = Record<string, { price: number }>;
 
 /**
  * Build a day-by-day portfolio value series over the trailing `days` window,
@@ -22,8 +36,8 @@ type PriceMap = Record<string, PriceData>;
  * today's price == current value).
  */
 export function buildPortfolioHistory(
-  transactions: DbTransaction[],
-  prices: PriceMap,
+  transactions: HistoryTransaction[],
+  prices: HistoryPriceMap,
   days: number,
   today: Date = new Date()
 ): PortfolioHistoryPoint[] {

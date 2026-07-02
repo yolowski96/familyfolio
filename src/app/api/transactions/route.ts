@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/db/prisma';
 import { transactionRepository, holdingRepository } from '@/lib/db/repositories';
-import { getAuthUser, AuthError, unauthorizedResponse } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { handleApiError } from '@/lib/api/handle-error';
 import { parseJsonBody } from '@/lib/api-utils';
 import { validatePersonOwnership } from '@/lib/api/validate-person';
 import type { AssetType, TransactionType } from '@prisma/client';
@@ -20,6 +22,8 @@ export async function GET(request: NextRequest) {
       type?: TransactionType;
       dateFrom?: Date;
       dateTo?: Date;
+      limit?: number;
+      cursor?: string;
     } = {};
 
     const personId = searchParams.get('personId');
@@ -28,6 +32,8 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') as TransactionType | null;
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
+    const limitParam = searchParams.get('limit');
+    const cursor = searchParams.get('cursor');
 
     if (personId) filters.personId = personId;
     if (assetSymbol) filters.assetSymbol = assetSymbol;
@@ -35,16 +41,16 @@ export async function GET(request: NextRequest) {
     if (type && VALID_TRANSACTION_TYPES.includes(type)) filters.type = type;
     if (dateFrom) filters.dateFrom = new Date(dateFrom);
     if (dateTo) filters.dateTo = new Date(dateTo);
+    if (limitParam) {
+      const parsed = Number(limitParam);
+      if (Number.isFinite(parsed) && parsed > 0) filters.limit = parsed;
+    }
+    if (cursor) filters.cursor = cursor;
 
     const transactions = await transactionRepository.findAll(user.id, filters);
     return NextResponse.json(transactions);
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('GET /api/transactions error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch transactions' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'GET /api/transactions');
   }
 }
 
@@ -112,27 +118,64 @@ export async function POST(request: NextRequest) {
       notes: body.notes as string | undefined,
     };
 
-    const transaction = await transactionRepository.create(user.id, transactionData);
+    const transaction = await prisma.$transaction(async (tx) => {
+      await tx.asset.upsert({
+        where: { symbol: transactionData.assetSymbol },
+        update: {},
+        create: {
+          symbol: transactionData.assetSymbol,
+          name: transactionData.assetName,
+          type: transactionData.assetType,
+          currency: transactionData.currency,
+          exchange: transactionData.exchange,
+        },
+      });
 
-    await holdingRepository.updateHoldingForTransaction(user.id, transactionData.personId, {
-      assetSymbol: transactionData.assetSymbol,
-      assetName: transactionData.assetName,
-      assetType: transactionData.assetType,
-      type: transactionData.type,
-      quantity: transactionData.quantity,
-      pricePerUnit: transactionData.pricePerUnit,
-      totalAmount: transactionData.totalAmount,
-      fee: transactionData.fee,
-      currency: transactionData.currency,
+      const created = await tx.transaction.create({
+        data: {
+          userId: user.id,
+          personId: transactionData.personId,
+          assetSymbol: transactionData.assetSymbol,
+          assetName: transactionData.assetName,
+          assetType: transactionData.assetType,
+          type: transactionData.type,
+          quantity: transactionData.quantity,
+          pricePerUnit: transactionData.pricePerUnit,
+          totalAmount: transactionData.totalAmount,
+          currency: transactionData.currency,
+          fee: transactionData.fee,
+          date: transactionData.date,
+          exchange: transactionData.exchange,
+          notes: transactionData.notes,
+        },
+        include: {
+          person: { select: { id: true, name: true, color: true } },
+          asset: { select: { symbol: true, name: true, type: true } },
+        },
+      });
+
+      await holdingRepository.updateHoldingForTransaction(
+        user.id,
+        transactionData.personId,
+        {
+          assetSymbol: transactionData.assetSymbol,
+          assetName: transactionData.assetName,
+          assetType: transactionData.assetType,
+          type: transactionData.type,
+          quantity: transactionData.quantity,
+          pricePerUnit: transactionData.pricePerUnit,
+          totalAmount: transactionData.totalAmount,
+          fee: transactionData.fee,
+          currency: transactionData.currency,
+        },
+        tx
+      );
+
+      return created;
     });
 
     return NextResponse.json({ transaction }, { status: 201 });
   } catch (error) {
-    if (error instanceof AuthError) return unauthorizedResponse();
-    console.error('POST /api/transactions error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create transaction' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'POST /api/transactions');
   }
 }

@@ -4,10 +4,7 @@ import * as React from 'react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePrivacy } from '@/components/providers/PrivacyProvider';
-import {
-  useFilteredTransactions,
-  usePortfolioStore,
-} from '@/store/usePortfolioStore';
+import { useFilteredTransactions } from '@/hooks/useFilteredData';
 import { AssetHolding } from '@/types';
 import { AssetDetailHeader } from './asset-detail/AssetDetailHeader';
 import { AssetValueOverview } from './asset-detail/AssetValueOverview';
@@ -34,25 +31,9 @@ export function AssetDetailSheet({
 }: AssetDetailSheetProps) {
   usePrivacy();
   const transactions = useFilteredTransactions();
-  const persons = usePortfolioStore((state) => state.persons);
-  const storeTransactions = usePortfolioStore((state) => state.transactions);
-  const loadBatch = usePortfolioStore((state) => state.loadBatch);
 
   const [currentPage, setCurrentPage] = React.useState(0);
   const editForm = useEditTransactionForm();
-
-  // Lazy-load transactions and persons the first time this sheet is opened.
-  const didFetch = React.useRef(false);
-  React.useEffect(() => {
-    if (!open || didFetch.current) return;
-    const needed: ('transactions' | 'persons')[] = [];
-    if (storeTransactions.length === 0) needed.push('transactions');
-    if (persons.length === 0) needed.push('persons');
-    if (needed.length > 0) {
-      didFetch.current = true;
-      loadBatch(needed).catch(console.error);
-    }
-  }, [open, storeTransactions.length, persons.length, loadBatch]);
 
   React.useEffect(() => {
     setCurrentPage(0);

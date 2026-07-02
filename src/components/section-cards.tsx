@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/card"
 import { usePrivacy } from "@/components/providers/PrivacyProvider"
 import { formatCurrency } from "@/lib/utils"
-import { usePortfolioStore } from "@/store/usePortfolioStore"
+import { useHoldings, usePersons } from "@/lib/queries"
+import { useActivePersonId } from "@/store/useUiStore"
 import { usePortfolioWithPrices } from "@/hooks/usePortfolioWithPrices"
 
 function formatPercent(value: number): string {
@@ -42,10 +43,10 @@ function LoadingSkeleton() {
 export function SectionCards() {
   usePrivacy();
   const { summary } = usePortfolioWithPrices()
-  const persons = usePortfolioStore((state) => state.persons)
-  const activePersonId = usePortfolioStore((state) => state.activePersonId)
-  const isInitialized = usePortfolioStore((state) => state.isInitialized)
-  const storeLoading = usePortfolioStore((state) => state.isLoading)
+  const { data: persons = [] } = usePersons()
+  const activePersonId = useActivePersonId()
+  const { isPending: holdingsPending } = useHoldings()
+  const isLoading = holdingsPending
 
   const total24hChange = summary.holdings.reduce((acc, h) => acc + h.change24h, 0)
   const total24hPercent = summary.totalBalance > 0 
@@ -56,7 +57,7 @@ export function SectionCards() {
     ? 'All Portfolios' 
     : persons.find(p => p.id === activePersonId)?.name || 'Portfolio'
 
-  if (!isInitialized || storeLoading) {
+  if (isLoading) {
     return <LoadingSkeleton />
   }
 

@@ -43,7 +43,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { usePortfolioStore } from "@/store/usePortfolioStore"
+import {
+  usePersons,
+  useTransactions,
+  useAddPerson,
+  useUpdatePerson,
+  useDeletePerson,
+  useSetDefaultPerson,
+} from "@/lib/queries"
 
 // Default colors for new persons
 const DEFAULT_COLORS = [
@@ -58,18 +65,29 @@ const DEFAULT_COLORS = [
 ]
 
 export function SettingsView() {
-  const persons = usePortfolioStore((state) => state.persons)
-  const transactions = usePortfolioStore((state) => state.transactions)
-  const addPerson = usePortfolioStore((state) => state.addPerson)
-  const updatePerson = usePortfolioStore((state) => state.updatePerson)
-  const setDefaultPerson = usePortfolioStore((state) => state.setDefaultPerson)
-  const deletePerson = usePortfolioStore((state) => state.deletePerson)
+  const { data: persons = [] } = usePersons()
+  const { data: transactions = [] } = useTransactions()
+  const { mutateAsync: addPerson } = useAddPerson()
+  const { mutateAsync: updatePerson } = useUpdatePerson()
+  const { mutateAsync: setDefaultPerson } = useSetDefaultPerson()
+  const { mutateAsync: deletePerson } = useDeletePerson()
   
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
   const [editDialogOpen, setEditDialogOpen] = React.useState(false)
   const [newPersonName, setNewPersonName] = React.useState('')
   const [newPersonColor, setNewPersonColor] = React.useState(DEFAULT_COLORS[0])
-  const [editingPerson, setEditingPerson] = React.useState<{ id: string; name: string; color: string } | null>(null)
+  const [editingPerson, setEditingPerson] = React.useState<{
+    id: string
+    name: string
+    color: string
+    apiKeyPrefix: string | null
+  } | null>(null)
+  const [apiKeyInput, setApiKeyInput] = React.useState('')
+  const [removeApiKey, setRemoveApiKey] = React.useState(false)
+  const [editError, setEditError] = React.useState<string | null>(null)
+
+  const trimmedApiKey = apiKeyInput.trim()
+  const apiKeyTooShort = trimmedApiKey.length > 0 && trimmedApiKey.length < 16
 
   // Calculate person stats
   const personStats = React.useMemo(() => {
@@ -90,7 +108,7 @@ export function SettingsView() {
     e.preventDefault()
     if (!newPersonName.trim()) return
 
-    await addPerson(newPersonName.trim(), newPersonColor)
+    await addPerson({ name: newPersonName.trim(), color: newPersonColor })
     setNewPersonName('')
     setNewPersonColor(DEFAULT_COLORS[persons.length % DEFAULT_COLORS.length])
     setCreateDialogOpen(false)
@@ -98,18 +116,43 @@ export function SettingsView() {
 
   const handleEditPerson = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingPerson || !editingPerson.name.trim()) return
+    if (!editingPerson || !editingPerson.name.trim() || apiKeyTooShort) return
 
-    await updatePerson(editingPerson.id, { 
+    const updates: { name: string; color: string; apiKey?: string | null } = {
       name: editingPerson.name.trim(),
-      color: editingPerson.color 
-    })
+      color: editingPerson.color,
+    }
+    if (removeApiKey) {
+      updates.apiKey = null
+    } else if (trimmedApiKey) {
+      updates.apiKey = trimmedApiKey
+    }
+
+    try {
+      await updatePerson({ id: editingPerson.id, updates })
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Failed to update person')
+      return
+    }
     setEditingPerson(null)
     setEditDialogOpen(false)
   }
 
-  const openEditDialog = (person: { id: string; name: string; color: string }) => {
-    setEditingPerson({ id: person.id, name: person.name, color: person.color })
+  const openEditDialog = (person: {
+    id: string
+    name: string
+    color: string
+    apiKeyPrefix: string | null
+  }) => {
+    setEditingPerson({
+      id: person.id,
+      name: person.name,
+      color: person.color,
+      apiKeyPrefix: person.apiKeyPrefix,
+    })
+    setApiKeyInput('')
+    setRemoveApiKey(false)
+    setEditError(null)
     setEditDialogOpen(true)
   }
 
@@ -298,7 +341,7 @@ export function SettingsView() {
                             Delete Person
                           </AlertDialogTitle>
                           <AlertDialogDescription>
-                            Are you sure you want to delete <strong>"{person.name}"</strong>? 
+                            Are you sure you want to delete <strong>&ldquo;{person.name}&rdquo;</strong>? 
                             This will also delete all {person.transactionCount} transactions 
                             and holdings associated with this person. This action cannot be undone.
                           </AlertDialogDescription>
@@ -363,8 +406,8 @@ export function SettingsView() {
                       key={color}
                       type="button"
                       className={`size-8 rounded-full border-2 transition-all ${
-                        editingPerson?.color === color 
-                          ? 'border-foreground scale-110' 
+                        editingPerson?.color === color
+                          ? 'border-foreground scale-110'
                           : 'border-transparent hover:scale-105'
                       }`}
                       style={{ backgroundColor: color }}
@@ -373,12 +416,59 @@ export function SettingsView() {
                   ))}
                 </div>
               </div>
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="editPersonApiKey">API Key</Label>
+                  {editingPerson?.apiKeyPrefix && (
+                    <button
+                      type="button"
+                      className={`text-xs ${
+                        removeApiKey
+                          ? 'text-muted-foreground hover:text-foreground'
+                          : 'text-rose-500 hover:text-rose-400'
+                      }`}
+                      onClick={() => {
+                        setRemoveApiKey((prev) => !prev)
+                        setApiKeyInput('')
+                      }}
+                    >
+                      {removeApiKey ? 'Keep current key' : 'Remove key'}
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id="editPersonApiKey"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={
+                    removeApiKey
+                      ? 'Key will be removed on save'
+                      : editingPerson?.apiKeyPrefix
+                        ? `Current: ${editingPerson.apiKeyPrefix} — paste new key to replace`
+                        : 'Paste API key from external app'
+                  }
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  disabled={removeApiKey}
+                />
+                {apiKeyTooShort ? (
+                  <p className="text-rose-500 text-xs">
+                    API key must be at least 16 characters
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    Grants read-only access to this person&apos;s positions via{' '}
+                    <code>GET /api/v1/positions</code>
+                  </p>
+                )}
+              </div>
+              {editError && <p className="text-rose-500 text-sm">{editError}</p>}
             </div>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setEditDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!editingPerson?.name.trim()}>
+              <Button type="submit" disabled={!editingPerson?.name.trim() || apiKeyTooShort}>
                 Save Changes
               </Button>
             </DialogFooter>
